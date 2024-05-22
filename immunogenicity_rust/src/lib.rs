@@ -4,9 +4,8 @@ use std::fs::{File, remove_file, create_dir_all};
 use std::io::BufReader;
 
 use std::hash::{Hash, Hasher};
-use std::fmt;
+//use std::fmt;
 
-use dashmap::DashMap;
 
 use std::fs;
 use std::io::{self, BufRead, Write};
@@ -19,7 +18,7 @@ use pyo3::exceptions::PyRuntimeError;
 
 use tar::Builder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
+//use flate2::Compression;
 
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
