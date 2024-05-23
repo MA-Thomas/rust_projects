@@ -25,9 +25,7 @@ def create_log_spaced_list(L, U, N):
 if __name__ == "__main__":
 
     # # LOCAL
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-data_xlsx", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA/mmc4.xlsx")
-    parser.add_argument("-data_xlsx2", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA/mmc7.xlsx")    
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter) 
     parser.add_argument("-cTEC", action='store_true', default=False, help="whether to use cTEC gene expression")
     parser.add_argument("-cTEC_conc", action='store_true', default=False)
     parser.add_argument("-plot_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA_IEDB_COMBO/plots", help="directory with precomputed scores")
@@ -102,7 +100,7 @@ if __name__ == "__main__":
     
     for idx, (row_index,row) in enumerate(pos_df.iterrows()):
         print("idx = ",idx)
-        if idx <= 10:
+        if idx <= -1:
             continue
         if idx > 20:
             break
