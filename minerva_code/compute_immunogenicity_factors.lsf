@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "In submit_ninemer_script.lsf"
+echo "In compute_immunogenicity_factors.lsf"
 
 ml anaconda3
 source /hpc/packages/minerva-centos7/anaconda3/2018.12/etc/profile.d/conda.sh
@@ -8,16 +8,24 @@ conda activate general_3.9
 
 ind=$1
 
-data_xlsx=/sc/arion/work/thomam32/WorkingDir/CFIT/bin/TESLA/mmc4.xlsx
-data_xlsx2=/sc/arion/work/thomam32/WorkingDir/CFIT/bin/TESLA/mmc7.xlsx
-data_dir=/sc/arion/projects/FLAI/marcus/CIO_datasets/self/vptrees/TCEM
-dist_dir=/sc/arion/projects/FLAI/marcus/TESLA/ninemer/
-nmhc_dir=/sc/arion/projects/FLAI/marcus/CIO_datasets/self/netmhc_40
-out_dir=/sc/arion/projects/FLAI/marcus/TESLA/with_Entropy_ninemer_newparams
+save_pkl_dir=/sc/arion/projects/FLAI/marcus/rust_outputs/immunogenicity_factors
+data_matrix_dir=/sc/arion//work/thomam32/WorkingDir/CFIT/cfit/data/matrices
+self_fasta_path=/sc/arion/projects/FLAI/marcus/Self_Epitopes/self_peptides.fasta
+immunogenic_Koncz_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/immunogenic_Koncz_peptides.fasta
+nonimmunogenic_Koncz_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/nonimmunogenic_Koncz_peptides.fasta
+immunogenic_Ours_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/immunogenic_Ours_peptides.fasta
+nonimmunogenic_Ours_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/nonimmunogenic_Ours_peptides.fasta
+csv_S_dir=/sc/arion/projects/FLAI/marcus/Self_Epitopes
+csv_F_dir=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes
+tesla_variables_dir=/sc/arion/projects/FLAI/marcus/TESLA
+iedb_variables_dir=/sc/arion/projects/FLAI/marcus/IEDB
 
-params="-data_xlsx $data_xlsx -data_xlsx2 $data_xlsx2 -data_dir $data_dir -dist_dir $dist_dir -nmhc_dir $nmhc_dir -ind $ind -out_dir $out_dir -ninemer" #MARCUS
+allele='A0201'
+
+params="-save_pkl_dir $save_pkl_dir -distance_metric_type $distance_metric_type -data_matrix_dir $data_matrix_dir -self_fasta_path $self_fasta_path -immunogenic_Koncz_fasta_path $immunogenic_Koncz_fasta_path -nonimmunogenic_Koncz_fasta_path $nonimmunogenic_Koncz_fasta_path -immunogenic_Ours_fasta_path $immunogenic_Ours_fasta_path -nonimmunogenic_Ours_fasta_path $nonimmunogenic_Ours_fasta_path -csv_S_dir $csv_S_dir -csv_F_dir $csv_F_dir -tesla_variables_dir $tesla_variables_dir -iedb_variables_dir $iedb_variables_dir -ind $ind -allele $allele"
 
 
-cdir=/sc/arion/work/thomam32/WorkingDir/CFIT/bin/TESLA/compute_scores_CODE
 
-/hpc/users/thomam32/.conda/envs/general_3.9/bin/python3.9 $cdir/compute_tolerance_scores_with_entropy.py $params
+cdir=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/immunogenicity_rust/TESLA_IEDB
+
+/hpc/users/thomam32/.conda/envs/general_3.9/bin/python3.9 $cdir/modeling_on_Minerva.py $params

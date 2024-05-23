@@ -13,6 +13,8 @@ chmod +x /sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/compute_imm
 outf='_OUT.txt'
 errf='_ERR.txt'
 
+echo "In run_compute_immunogenicity_factors.lsf"
+
 # for((i=0;i<=4903;i+=1))
 for((i=0;i<=1;i+=1))
 do

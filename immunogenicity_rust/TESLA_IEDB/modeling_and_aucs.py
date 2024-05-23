@@ -43,6 +43,11 @@ if __name__ == "__main__":
 
     parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
+    
+    parser.add_argument("-allele", default='A0201')
+
+    parser.add_argument("-inclusive_start_ind", default="0")
+    parser.add_argument("-inclusive_end_ind", default="1")
     args = parser.parse_args()
 
 
@@ -69,6 +74,8 @@ if __name__ == "__main__":
     save_query_distance_files = False 
     load_precomputed_distances = False 
 
+    inclusive_start_ind = int(args.inclusive_start_ind)
+    inclusive_end_ind = int(args.inclusive_end_ind) 
 
     data_matrix_dir = args.data_matrix_dir
     self_fasta_path = args.self_fasta_path
@@ -98,11 +105,13 @@ if __name__ == "__main__":
     tesla_iedb_data = pd.concat([tesla_data, iedb_data])
     tesla_iedb_data = tesla_iedb_data.sort_values(by='peptides')
 
-    allele = 'A0101'
+    allele = args.allele 
     hla = "HLA-"+allele
 
     pos_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 1) & (tesla_iedb_data['allele'] == allele)]
     neg_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 0) & (tesla_iedb_data['allele'] == allele)]
+
+    hla_df = tesla_iedb_data[tesla_iedb_data['allele'] == allele]
 
     
     csv_S_kds_file = os.path.join(args.csv_S_dir, "self_epitopes_Kd_values_"+hla+".csv")
@@ -111,12 +120,12 @@ if __name__ == "__main__":
     csv_OImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_Imm/epitopes_Kd_values_"+hla+".csv")
     csv_ONImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_nonImm/epitopes_Kd_values_"+hla+".csv")
     
-    for idx, (row_index,row) in enumerate(pos_df.iterrows()):
+    for idx, (row_index,row) in enumerate(hla_df.iterrows()):
         print("idx = ",idx)
-        # if idx <= 20:
+        # if idx < inclusive_start_ind:
         #     continue
-        if idx > 30:
-            break
+        # if idx > inclusive_end_ind:
+        #     break
 
 
         allele = row['allele']
@@ -139,7 +148,6 @@ if __name__ == "__main__":
 
         
         compute_logKinv_and_entropy = True
-        # param_info = [(1e-6,1e-4,10,1e-2,1.0,5)]
 
         # # PARAMETER SETS FOR ZACH'S METRIC
         gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 12),10)) + list(np.round(create_log_spaced_list(2e-4, 1, 3),4)) )))
