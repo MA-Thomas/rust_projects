@@ -40,10 +40,12 @@ if __name__ == "__main__":
 
     parser.add_argument("-csv_S_dir", default="/Users/marcus/Work_Data/Self_Epitopes")
     parser.add_argument("-csv_F_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
+
+    parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
+    parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
     args = parser.parse_args()
 
-    args.tesla_variables_dir = "/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA"
-    args.iedb_variables_dir = "/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB"
+
     
 
     '''
