@@ -26,22 +26,15 @@ if __name__ == "__main__":
 
     # # LOCAL
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-data_xlsx", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA/mmc4.xlsx")
+    parser.add_argument("-data_xlsx2", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA/mmc7.xlsx")    
     parser.add_argument("-cTEC", action='store_true', default=False, help="whether to use cTEC gene expression")
     parser.add_argument("-cTEC_conc", action='store_true', default=False)
+    parser.add_argument("-plot_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA_IEDB_COMBO/plots", help="directory with precomputed scores")
     parser.add_argument("-save_pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs")
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
-
-    parser.add_argument("-data_matrix_dir", default="/Users/marcus/Work_Data/Conifold_editing/CFIT/cfit/data/matrices/")
-    parser.add_argument("-self_fasta_path", default="/Users/marcus/Work_Data/Self_Epitopes/self_peptides.fasta")
-    parser.add_argument("-immunogenic_Koncz_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Koncz_peptides.fasta")
-    parser.add_argument("-nonimmunogenic_Koncz_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_Koncz_peptides.fasta")
-    parser.add_argument("-immunogenic_Ours_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Ours_peptides.fasta")
-    parser.add_argument("-nonimmunogenic_Ours_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_Ours_peptides.fasta")
-
-    parser.add_argument("-csv_S_dir", default="/Users/marcus/Work_Data/Self_Epitopes")
-    parser.add_argument("-csv_F_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
     args = parser.parse_args()
-
+    
     args.tesla_variables_dir = "/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA"
     args.iedb_variables_dir = "/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB"
     
@@ -67,16 +60,14 @@ if __name__ == "__main__":
     save_query_distance_files = False 
     load_precomputed_distances = False 
 
+    data_matrix_dir = "/Users/marcus/Work_Data/Conifold_editing/CFIT/cfit/data/matrices/"
+    self_fasta_path = "/Users/marcus/Work_Data/Self_Epitopes/self_peptides.fasta"
 
-    data_matrix_dir = args.data_matrix_dir
-    self_fasta_path = args.self_fasta_path
+    immunogenic_Koncz_fasta_path = "/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Koncz_peptides.fasta"
+    nonimmunogenic_Koncz_fasta_path = "/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_Koncz_peptides.fasta"
 
-    immunogenic_Koncz_fasta_path = args.immunogenic_Koncz_fasta_path
-    nonimmunogenic_Koncz_fasta_path = args.nonimmunogenic_Koncz_fasta_path
-
-    immunogenic_Ours_fasta_path = args.immunogenic_Ours_fasta_path
-    nonimmunogenic_Ours_fasta_path = args.nonimmunogenic_Ours_fasta_path
-
+    immunogenic_Ours_fasta_path = "/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Ours_peptides.fasta"
+    nonimmunogenic_Ours_fasta_path = "/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_Ours_peptides.fasta"
 
     start_time = time.time()
 
@@ -103,11 +94,11 @@ if __name__ == "__main__":
     neg_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 0) & (tesla_iedb_data['allele'] == allele)]
 
     
-    csv_S_kds_file = os.path.join(args.csv_S_dir, "self_epitopes_Kd_values_"+hla+".csv")
-    csv_KImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Koncz_Imm/epitopes_Kd_values_"+hla+".csv")
-    csv_KNImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Koncz_nonImm/epitopes_Kd_values_"+hla+".csv")
-    csv_OImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_Imm/epitopes_Kd_values_"+hla+".csv")
-    csv_ONImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_nonImm/epitopes_Kd_values_"+hla+".csv")
+    csv_S_kds_file = "/Users/marcus/Work_Data/Self_Epitopes/Kds/self_epitopes_Kd_values_"+hla+".csv"
+    csv_KImm_kds_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Kds/Koncz_Imm/epitopes_Kd_values_"+hla+".csv"
+    csv_KNImm_kds_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Kds/Koncz_nonImm/epitopes_Kd_values_"+hla+".csv"
+    csv_OImm_kds_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Kds/Ours_Imm/epitopes_Kd_values_"+hla+".csv"
+    csv_ONImm_kds_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Kds/Ours_nonImm/epitopes_Kd_values_"+hla+".csv"
     
     for idx, (row_index,row) in enumerate(pos_df.iterrows()):
         print("idx = ",idx)
@@ -122,11 +113,11 @@ if __name__ == "__main__":
         print(query_epi_list, allele)
 
         if save_query_distance_files:
-            csv_S_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_self_distances.csv")
-            csv_KImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Koncz_imm_distances.csv")
-            csv_KNImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Koncz_nonimm_distances.csv")
-            csv_OImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Ours_imm_distances.csv")
-            csv_ONImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Ours_nonimm_distances.csv")
+            csv_S_dists_file = "/Users/marcus/Work_Data/Self_Epitopes/Distances/QUERYEPISTR_self_distances.csv"
+            csv_KImm_dists_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Distances/QUERYEPISTR_Koncz_imm_distances.csv"
+            csv_KNImm_dists_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Distances/QUERYEPISTR_Koncz_nonimm_distances.csv"
+            csv_OImm_dists_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Distances/QUERYEPISTR_Ours_imm_distances.csv"
+            csv_ONImm_dists_file = "/Users/marcus/Work_Data/Foreign_Epitopes/Distances/QUERYEPISTR_Ours_nonimm_distances.csv"
         else:
             csv_S_dists_file = ""
             csv_KImm_dists_file = ""

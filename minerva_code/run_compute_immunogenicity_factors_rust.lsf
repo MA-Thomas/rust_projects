@@ -1,0 +1,26 @@
+#!/bin/bash
+#BSUB -P acc_lukszaLab
+#BSUB -q express
+#BSUB -n 1
+#BSUB -R rusage[mem=100] # 100MB
+#BSUB -W 0:20                # Hours:minutes
+#BSUB -L /bin/bash
+#BSUB -J run_compute_immunogenicity_factors.lsf
+#BSUB -oo run_compute_immunogenicity_factors_OUT.txt
+#BSUB -eo run_compute_immunogenicity_factors_ERR.txt
+
+chmod +x /sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/compute_immunogenicity_factors.lsf
+outf='_OUT.txt'
+errf='_ERR.txt'
+
+# for((i=0;i<=4903;i+=1))
+for((i=0;i<=1;i+=1))
+do
+    echo $i
+    job1Name=peptide_${i}_compute_immunogenicities_rust
+    job1OutErr=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/OUT_ERR_compute_factors/peptide_${i}
+
+    # # Total memory requested for this job is mem * n
+    bsub -J $job1Name -oo $job1OutErr$outf -eo $job1OutErr$errf -q premium -P acc_lukszaLab -R rusage[mem=8000] -R span[hosts=1] -n 1 -W 32:00 ./compute_immunogenicity_factors.lsf "$i"
+
+done

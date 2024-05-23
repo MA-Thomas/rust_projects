@@ -1,0 +1,23 @@
+#!/bin/bash
+
+echo "In submit_ninemer_script.lsf"
+
+ml anaconda3
+source /hpc/packages/minerva-centos7/anaconda3/2018.12/etc/profile.d/conda.sh
+conda activate general_3.9
+
+ind=$1
+
+data_xlsx=/sc/arion/work/thomam32/WorkingDir/CFIT/bin/TESLA/mmc4.xlsx
+data_xlsx2=/sc/arion/work/thomam32/WorkingDir/CFIT/bin/TESLA/mmc7.xlsx
+data_dir=/sc/arion/projects/FLAI/marcus/CIO_datasets/self/vptrees/TCEM
+dist_dir=/sc/arion/projects/FLAI/marcus/TESLA/ninemer/
+nmhc_dir=/sc/arion/projects/FLAI/marcus/CIO_datasets/self/netmhc_40
+out_dir=/sc/arion/projects/FLAI/marcus/TESLA/with_Entropy_ninemer_newparams
+
+params="-data_xlsx $data_xlsx -data_xlsx2 $data_xlsx2 -data_dir $data_dir -dist_dir $dist_dir -nmhc_dir $nmhc_dir -ind $ind -out_dir $out_dir -ninemer" #MARCUS
+
+
+cdir=/sc/arion/work/thomam32/WorkingDir/CFIT/bin/TESLA/compute_scores_CODE
+
+/hpc/users/thomam32/.conda/envs/general_3.9/bin/python3.9 $cdir/compute_tolerance_scores_with_entropy.py $params
