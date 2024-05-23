@@ -31,7 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("-cTEC", action='store_true', default=False, help="whether to use cTEC gene expression")
     parser.add_argument("-cTEC_conc", action='store_true', default=False)
     parser.add_argument("-plot_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA_IEDB_COMBO/plots", help="directory with precomputed scores")
-    parser.add_argument("-save_pkl_dir", default="/Users/marcus/Work_Data/rust_projects/immunogenicity_rust/TESLA_IEDB/immunogenicity_outputs")
+    parser.add_argument("-save_pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs")
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
     args = parser.parse_args()
     
@@ -102,10 +102,11 @@ if __name__ == "__main__":
     
     for idx, (row_index,row) in enumerate(pos_df.iterrows()):
         print("idx = ",idx)
-        if idx <= 10:
+        if idx <= 20:
             continue
-        if idx > 20:
+        if idx > 40:
             break
+
 
         allele = row['allele']
         query_epi_list = row['peptides']
