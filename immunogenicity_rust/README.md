@@ -3,6 +3,11 @@
 /src/lib.rs is the main rust library. 
 Auxiliary functions are in /src/lib_io.rs and /src/lib_rust_function_versions.rs 
 
+Notes:
+Distances calculations to self epitope set takes <20s per query epitope.
+Computing the immunogenicity factors (including the distance calculations) at ~400 parameter sets takes ~3min per query epitope.
+
+
 To run the code using vscode:
 
 1. Clone the repo form github to your local machine
