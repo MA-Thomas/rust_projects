@@ -98,7 +98,7 @@ pub fn compute_distances_from_query_rs(query_epi: &str,
 }
 
 
-pub fn process_distance_info_vec(dist_file_info: &Vec<(&str, bool, &str)>, 
+pub fn process_distance_info_vec_rs(dist_file_info: &Vec<(&str, bool, &str)>, 
                              query_epi: &str, 
                              dist_metric: &str, 
                              data_matrix_dir: &str, 

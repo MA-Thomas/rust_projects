@@ -108,13 +108,13 @@ if __name__ == "__main__":
     allele = args.allele 
     hla = "HLA-"+allele
 
-    pos_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 1) & (tesla_iedb_data['allele'] == allele)]
-    neg_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 0) & (tesla_iedb_data['allele'] == allele)]
+    # pos_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 1) & (tesla_iedb_data['allele'] == allele)]
+    # neg_df = tesla_iedb_data[(tesla_iedb_data['immunogenicity'] == 0) & (tesla_iedb_data['allele'] == allele)]
 
     hla_df = tesla_iedb_data[tesla_iedb_data['allele'] == allele]
 
     
-    csv_S_kds_file = os.path.join(args.csv_S_dir, "self_epitopes_Kd_values_"+hla+".csv")
+    csv_S_kds_file = os.path.join(args.csv_S_dir, "Kds/self_epitopes_Kd_values_"+hla+".csv")
     csv_KImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Koncz_Imm/epitopes_Kd_values_"+hla+".csv")
     csv_KNImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Koncz_nonImm/epitopes_Kd_values_"+hla+".csv")
     csv_OImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_Imm/epitopes_Kd_values_"+hla+".csv")

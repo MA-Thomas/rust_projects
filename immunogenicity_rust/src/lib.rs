@@ -32,7 +32,7 @@ use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, load_epitopes_dista
 
 mod lib_rust_function_versions;
 use lib_rust_function_versions::{compute_distances_from_query_rs, compute_gamma_d_coeff_rs, 
-    process_distance_info_vec, process_kd_info_vec, 
+    process_distance_info_vec_rs, process_kd_info_vec, 
     log_sum, compute_entropy, generate_parameter_values, compute_logKinv_and_entropy_dict_rs,
     compute_logCh_dict_rs};
 /////////////////////////////////////////////////////////////////////////
@@ -355,7 +355,7 @@ pub fn compute_log_non_rho_terms_py(query_epi: &str,
 
     //////////    PREPROCESSING    /////////
     // Load or Generate Distances from Query into HashMap
-    let epi_dist_dict = match process_distance_info_vec(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
+    let epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
         Ok(epi_dist_dict) => {
             println!("[rust] Distance processing succeeded.");
             epi_dist_dict
@@ -522,7 +522,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     for query_epi in query_epi_list {
 
         // Load or Generate Distances from Query into HashMap
-        let epi_dist_dict = match process_distance_info_vec(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
+        let epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
             Ok(epi_dist_dict) => {
                 println!("[rust] Distance processing succeeded.");
                 epi_dist_dict
