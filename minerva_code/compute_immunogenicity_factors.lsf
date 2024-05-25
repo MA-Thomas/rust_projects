@@ -1,0 +1,31 @@
+#!/bin/bash
+
+echo "In compute_immunogenicity_factors.lsf"
+
+ml anaconda3
+source /hpc/packages/minerva-centos7/anaconda3/2018.12/etc/profile.d/conda.sh
+conda activate general_3.9
+
+ind=$1
+
+save_pkl_dir=/sc/arion/projects/FLAI/marcus/rust_outputs/immunogenicity_factors
+data_matrix_dir=/sc/arion//work/thomam32/WorkingDir/CFIT/cfit/data/matrices
+self_fasta_path=/sc/arion/projects/FLAI/marcus/Self_Epitopes/self_peptides.fasta
+immunogenic_Koncz_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/immunogenic_Koncz_peptides.fasta
+nonimmunogenic_Koncz_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/nonimmunogenic_Koncz_peptides.fasta
+immunogenic_Ours_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/immunogenic_Ours_peptides.fasta
+nonimmunogenic_Ours_fasta_path=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes/nonimmunogenic_Ours_peptides.fasta
+csv_S_dir=/sc/arion/projects/FLAI/marcus/Self_Epitopes
+csv_F_dir=/sc/arion/projects/FLAI/marcus/Foreign_Epitopes
+tesla_variables_dir=/sc/arion/projects/FLAI/marcus/TESLA
+iedb_variables_dir=/sc/arion/projects/FLAI/marcus/IEDB
+
+allele='A0201'
+
+params="-save_pkl_dir $save_pkl_dir -distance_metric_type $distance_metric_type -data_matrix_dir $data_matrix_dir -self_fasta_path $self_fasta_path -immunogenic_Koncz_fasta_path $immunogenic_Koncz_fasta_path -nonimmunogenic_Koncz_fasta_path $nonimmunogenic_Koncz_fasta_path -immunogenic_Ours_fasta_path $immunogenic_Ours_fasta_path -nonimmunogenic_Ours_fasta_path $nonimmunogenic_Ours_fasta_path -csv_S_dir $csv_S_dir -csv_F_dir $csv_F_dir -tesla_variables_dir $tesla_variables_dir -iedb_variables_dir $iedb_variables_dir -ind $ind -allele $allele"
+
+
+
+cdir=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/immunogenicity_rust/TESLA_IEDB
+
+/hpc/users/thomam32/.conda/envs/general_3.9/bin/python3.9 $cdir/modeling_on_Minerva.py $params

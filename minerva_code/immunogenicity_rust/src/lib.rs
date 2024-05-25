@@ -32,7 +32,7 @@ use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, load_epitopes_dista
 
 mod lib_rust_function_versions;
 use lib_rust_function_versions::{compute_distances_from_query_rs, compute_gamma_d_coeff_rs, 
-    process_distance_info_vec_rs, process_kd_info_vec, 
+    process_distance_info_vec, process_kd_info_vec, 
     log_sum, compute_entropy, generate_parameter_values, compute_logKinv_and_entropy_dict_rs,
     compute_logCh_dict_rs};
 /////////////////////////////////////////////////////////////////////////
@@ -355,7 +355,7 @@ pub fn compute_log_non_rho_terms_py(query_epi: &str,
 
     //////////    PREPROCESSING    /////////
     // Load or Generate Distances from Query into HashMap
-    let epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
+    let epi_dist_dict = match process_distance_info_vec(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
         Ok(epi_dist_dict) => {
             println!("[rust] Distance processing succeeded.");
             epi_dist_dict
@@ -391,6 +391,17 @@ pub fn compute_log_non_rho_terms_py(query_epi: &str,
         epi_log_conc_dict.insert(key.clone(), 0.0);
     }
     let use_counts_concs: bool = false;
+
+
+    // Specify parameter ranges and sizes.
+    // let param_info_tuple = param_info.into_iter().next().unwrap(); // Assuming param_info has at least one element
+    // let (lower_gamma_d, upper_gamma_d, num_gamma_d_values, lower_gamma_logkd, upper_gamma_logkd, num_gamma_logkd_values) = param_info_tuple;
+    
+    // Generate parameter values.
+    // let gamma_d_values = generate_parameter_values(lower_gamma_d, upper_gamma_d, num_gamma_d_values, false);
+    // let gamma_logkd_values = generate_parameter_values(lower_gamma_logkd, upper_gamma_logkd, num_gamma_logkd_values, false);
+    // println!("gamma_d_values: {:?}", gamma_d_values);
+    // println!("gamma_logkd_values: {:?}", gamma_logkd_values);
 
     // Compute gamma_d_coeff
     let gamma_d_coeff_result = compute_gamma_d_coeff_rs(dist_metric, data_matrix_dir);
@@ -481,6 +492,14 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
 
     let mut logKinv_entropy_multi_query_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>> = HashMap::new();
 
+    // Specify parameter ranges and sizes.
+    // let param_info_tuple = param_info.into_iter().next().unwrap(); // Assuming param_info has at least one element
+    // let (lower_gamma_d, upper_gamma_d, num_gamma_d_values, lower_gamma_logkd, upper_gamma_logkd, num_gamma_logkd_values) = param_info_tuple;
+    
+    // Generate parameter values.
+    // let gamma_d_values = generate_parameter_values(lower_gamma_d, upper_gamma_d, num_gamma_d_values, false);
+    // let gamma_logkd_values = generate_parameter_values(lower_gamma_logkd, upper_gamma_logkd, num_gamma_logkd_values, true);
+
     // Compute gamma_d_coeff
     let gamma_d_coeff_result = compute_gamma_d_coeff_rs(dist_metric, data_matrix_dir);
     let gamma_d_coeff: f64;
@@ -522,7 +541,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     for query_epi in query_epi_list {
 
         // Load or Generate Distances from Query into HashMap
-        let epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
+        let epi_dist_dict = match process_distance_info_vec(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
             Ok(epi_dist_dict) => {
                 println!("[rust] Distance processing succeeded.");
                 epi_dist_dict
