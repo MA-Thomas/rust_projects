@@ -122,10 +122,10 @@ if __name__ == "__main__":
     
     for idx, (row_index,row) in enumerate(hla_df.iterrows()):
         print("idx = ",idx)
-        if idx <= -1:
-            continue
-        if idx > 20:
-            break
+        # if idx <= -1:
+        #     continue
+        # if idx > 20:
+        #     break
 
         allele = row['allele']
         query_epi_list = row['peptides']
