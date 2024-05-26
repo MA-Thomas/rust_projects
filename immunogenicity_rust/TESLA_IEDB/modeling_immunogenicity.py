@@ -44,10 +44,10 @@ if __name__ == "__main__":
     parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
     
-    parser.add_argument("-allele", default='A0201')
+    parser.add_argument("-allele", default='A0101')
 
     parser.add_argument("-inclusive_start_ind", default="0")
-    parser.add_argument("-inclusive_end_ind", default="1")
+    parser.add_argument("-inclusive_end_ind", default="10")
     args = parser.parse_args()
 
 
@@ -122,10 +122,10 @@ if __name__ == "__main__":
     
     for idx, (row_index,row) in enumerate(hla_df.iterrows()):
         print("idx = ",idx)
-        # if idx < inclusive_start_ind:
-        #     continue
-        # if idx > inclusive_end_ind:
-        #     break
+        if idx < inclusive_start_ind:
+            continue
+        if idx > inclusive_end_ind:
+            break
 
 
         allele = row['allele']
@@ -157,12 +157,12 @@ if __name__ == "__main__":
         gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  )))
 
 
-        d_PS_threshold = 70.0 # # distances above this threshold do not contirbute to Kinv_self (models positive selection)
-        d_NS_cutoff = 3.14 # # distances below this cutoff do not contribute to Kinv_self (partially models negative selection)
         #################################################################################################
         #################################################################################################
         ##                                 Self settings.
         compute_logCh = True
+        d_PS_threshold = 70.0 # # distances above this threshold do not contirbute to Kinv_self (models positive selection)
+        d_NS_cutoff = 3.14 # # distances below this cutoff do not contribute to Kinv_self (partially models negative selection)
         #################################################################################################
         #################################################################################################
 
@@ -178,21 +178,23 @@ if __name__ == "__main__":
             compute_logKinv_and_entropy,
             compute_logCh,
         )
-        # print("len(logKInv_entropy_self_dict): ",len(logKInv_entropy_self_dict))
-        # print("A few items from logKInv_entropy_self_dict: ")
-        # for key, value in itertools.islice(logKInv_entropy_self_dict.items(), 5):
-        #     print(f"{key}: {value}")
+        print("len(logKInv_entropy_self_dict): ",len(logKInv_entropy_self_dict))
+        print("A few items from logKInv_entropy_self_dict: ")
+        for key, value in itertools.islice(logKInv_entropy_self_dict.items(), 3):
+            print(f"{key}: {value}")
         print("[python] logKInv_entropy_self_dict/logCh_dict runtime: ",runtime)
 
-        # print("len(logCh_dict): ",len(logCh_dict))
-        # print("A few items from logKIlogCh_dictnv_entropy_self_dict: ")
-        # for key, value in itertools.islice(logCh_dict.items(), 5):
-        #     print(f"{key}: {value}")
+        print("len(logCh_dict): ",len(logCh_dict))
+        print("A few items from logKIlogCh_dictnv_entropy_self_dict: ")
+        for key, value in itertools.islice(logCh_dict.items(), 5):
+            print(f"{key}: {value}")
 
         #################################################################################################
         #################################################################################################
         ##                                 Foreign settings.
         compute_logCh = False
+        d_PS_threshold = 1e10 # # not relevant for K_inv evaluated on foreign target set
+        d_NS_cutoff = 0 # # not relevant for K_inv evaluated on foreign target set
         #################################################################################################
         #################################################################################################
 
@@ -208,10 +210,10 @@ if __name__ == "__main__":
             compute_logKinv_and_entropy,
             compute_logCh,
         )
-        # print("len(logKInv_entropy_Koncz_imm_epi_dict): ",len(logKInv_entropy_Koncz_imm_epi_dict))
-        # print("A few items from logKInv_entropy_Koncz_imm_epi_dict: ")
-        # for key, value in itertools.islice(logKInv_entropy_Koncz_imm_epi_dict.items(), 5):
-        #     print(f"{key}: {value}")
+        print("len(logKInv_entropy_Koncz_imm_epi_dict): ",len(logKInv_entropy_Koncz_imm_epi_dict))
+        print("A few items from logKInv_entropy_Koncz_imm_epi_dict: ")
+        for key, value in itertools.islice(logKInv_entropy_Koncz_imm_epi_dict.items(), 5):
+            print(f"{key}: {value}")
         print("[python] Koncz_imm runtime: ",runtime)
 
         logKInv_entropy_Koncz_non_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
