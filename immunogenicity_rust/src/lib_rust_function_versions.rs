@@ -137,8 +137,9 @@ pub fn process_distance_info_vec_rs(dist_file_info: &Vec<(&str, bool, &str)>,
                         .map(|elem| (elem.epitope, elem.distance))
                         .collect();
 
-                    if target_epi_dist_dict.len() > 10 {
-                        for (key, value) in target_epi_dist_dict.iter().take(10) {
+                    println!("First few entries of target_epi_dist_dict: ");
+                    if target_epi_dist_dict.len() > 3 {
+                        for (key, value) in target_epi_dist_dict.iter().take(3) {
                             println!("[rust] {:?}: {:?}", key, value);
                         }
                     } else {
@@ -178,7 +179,7 @@ pub fn process_distance_info_vec_rs(dist_file_info: &Vec<(&str, bool, &str)>,
 }
 
 
-pub fn process_kd_info_vec(csv_kds_file_path: &str) -> Result<HashMap<String, f64>, String> {
+pub fn process_kd_info_vec_rs(csv_kds_file_path: &str) -> Result<HashMap<String, f64>, String> {
     
 
     let mut csv_kds_file_path_opt: Option<String> = Some(csv_kds_file_path.to_string());
@@ -206,8 +207,9 @@ pub fn process_kd_info_vec(csv_kds_file_path: &str) -> Result<HashMap<String, f6
                 .map(|elem| (elem.epitope, elem.Kd))
                 .collect();
 
-            if target_epi_kd_dict.len() > 10 {
-                for (key, value) in target_epi_kd_dict.iter().take(10) {
+            println!("First few entries of target_epi_kd_dict: ");
+            if target_epi_kd_dict.len() > 3 {
+                for (key, value) in target_epi_kd_dict.iter().take(3) {
                     println!("[rust] {:?}: {:?}", key, value);
                 }
             } else {
@@ -223,18 +225,60 @@ pub fn process_kd_info_vec(csv_kds_file_path: &str) -> Result<HashMap<String, f6
 
 
 
-pub fn log_sum(v: &[f64]) -> Option<f64> {
-    if let Some(&ma) = v.iter().max_by(|&&a, &&b| a.partial_cmp(&b).unwrap()) {
-        if ma == f64::NEG_INFINITY {
-            Some(f64::NEG_INFINITY)
-        } else {
-            let sum_exp = v.iter().map(|&x| (x - ma).exp()).sum::<f64>();
-            Some(sum_exp.ln() + ma)
-        }
-    } else {
-        None
+// pub fn log_sum(v: &[f64]) -> Option<f64> {
+//     if let Some(&ma) = v.iter().max_by(|&&a, &&b| a.partial_cmp(&b).unwrap()) {
+//         if ma == f64::NEG_INFINITY {
+//             Some(f64::NEG_INFINITY)
+//         } else {
+//             let sum_exp = v.iter().map(|&x| (x - ma).exp()).sum::<f64>();
+//             Some(sum_exp.ln() + ma)
+//         }
+//     } else {
+//         None
+//     }
+// }
+// Define a custom error type for NaN or infinity values
+#[derive(Debug)]
+struct InputError(&'static str);
+
+// Implement std::fmt::Display trait for InputError
+use std::fmt;
+impl fmt::Display for InputError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
+// Implement std::error::Error trait for InputError
+use std::error::Error;
+impl Error for InputError {}
+use std::num::ParseFloatError;
+pub fn log_sum(v: &[f64]) -> Result<f64, InputError> {
+    if v.is_empty() {
+        // If the input slice is empty, return negative infinity
+        return Ok(f64::NEG_INFINITY);
+    }
+
+    // Check for NaN or infinity values in the input slice
+    if v.iter().any(|&x| x.is_nan() || x == f64::INFINITY || x == f64::NEG_INFINITY) {
+        // Return an error indicating that the input contains NaN or infinity values
+        return Err(InputError("Input contains NaN or INFINITY values"));
+    }
+
+    // Find the maximum value among the input values
+    let ma = *v.iter().max_by(|&&a, &&b| a.partial_cmp(&b).unwrap()).unwrap();
+
+    if ma == f64::NEG_INFINITY {
+        // If the maximum value is negative infinity, return negative infinity
+        Ok(f64::NEG_INFINITY)
+    } else {
+        // Calculate the sum of exponential values relative to the maximum value
+        let sum_exp = v.iter().map(|&x| (x - ma).exp()).sum::<f64>();
+        Ok(sum_exp.ln() + ma)
+    }
+}
+
+
+
 pub fn compute_entropy(v: &[f64], log_z: f64) -> Option<f64> {
     // Calculate the probabilities by exponentiating each value in the vector
     let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
@@ -256,18 +300,6 @@ pub fn compute_entropy(v: &[f64], log_z: f64) -> Option<f64> {
     }
 }
 
-// Function to generate parameter values with either linear or logarithmic spacing
-pub fn generate_parameter_values(lower_bound: f64, upper_bound: f64, num_values: usize, use_log_spacing: bool) -> Vec<f64> {
-    if use_log_spacing {
-        (0..num_values)
-            .map(|i| lower_bound * ((upper_bound / lower_bound).powf(i as f64 / (num_values - 1) as f64)))
-            .collect()
-    } else {
-        (0..num_values)
-            .map(|i| lower_bound + (upper_bound - lower_bound) * i as f64 / (num_values - 1) as f64)
-            .collect()
-    }
-}
 
 pub fn compute_logKinv_and_entropy_dict_rs(
     epi_dist_dict: &HashMap<String, f64>,
@@ -281,96 +313,133 @@ pub fn compute_logKinv_and_entropy_dict_rs(
     d_NS_cutoff: f64,
     use_counts_concs: bool) -> HashMap<String, Option<(f64, f64)>> {
 
-    let mut log_Kinv_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
+    const KD_THRESHOLD: f64 = 1e-10;
 
-    let epi_dist_dict_arc = Arc::new(epi_dist_dict.clone());
-    let epi_kd_dict_arc = Arc::new(epi_kd_dict.clone());
-
-    if use_counts_concs {   
-        // The extra loop iterations associated with epi_log_count_dict and epi_log_conc_dict can nearly double the
-        // run time of this function. Try to find ways to improve efficiency if they need to be used. 
-        let epi_log_count_dict_arc = Arc::new(epi_log_count_dict.clone());
-        let epi_log_conc_dict_arc = Arc::new(epi_log_conc_dict.clone());
-
-        let epi_dist_dict_ref = &epi_dist_dict_arc;
-        let epi_kd_dict_ref = &epi_kd_dict_arc;
-        let epi_log_count_dict_ref = &epi_log_count_dict_arc;
-        let epi_log_conc_dict_ref = &epi_log_conc_dict_arc;
-
-        log_Kinv_dict = gamma_d_values
-            .par_iter()
-            .flat_map(|&gamma_d_value| {
- 
-                let epi_dist_dict_ref = &epi_dist_dict_ref;
-                let epi_kd_dict_ref = &epi_kd_dict_ref;
-                let epi_log_count_dict_ref = &epi_log_count_dict_ref;
-                let epi_log_conc_dict_ref = &epi_log_conc_dict_ref;
-
-                gamma_logkd_values.par_iter().map(move |&gamma_logKd_value| {
-                    let mut values = Vec::with_capacity(epi_dist_dict_ref.len());
-                    for (epi, &dist) in epi_dist_dict_ref.iter() {
-                        if dist < d_PS_threshold && dist > d_NS_cutoff {
-                            if let Some(&kd) = epi_kd_dict_ref.get(epi) {
-                                if let Some(&log_count) = epi_log_count_dict_ref.get(epi) {
-                                    if let Some(&log_conc) = epi_log_conc_dict_ref.get(epi) {
-                                        let value =
-                                            -gamma_d_value * dist * gamma_d_coeff - gamma_logKd_value * kd.ln() + log_count + log_conc;
-                                        values.push(value);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    let result = log_sum(&values); // log_Kinv or "logZ"
-                    let entropy = if let Some(result) = result {
-                        compute_entropy(&values, result)
-                    } else {
-                        None
-                    };
-                    let key = tuple_to_string(&(gamma_d_value, gamma_logKd_value));
-                    (key, Some((result.unwrap_or(0.0), entropy.unwrap_or(0.0))))
-                })
-            })
-            .collect();
-
+    // Convert HashMap values to arrays
+    let epi_dist_array = Array1::from(epi_dist_dict.values().copied().collect::<Vec<_>>());
+    let epi_kd_array = Array1::from(epi_kd_dict.values().copied().collect::<Vec<_>>());
+    let epi_log_count_array = if use_counts_concs {
+        Array1::from(epi_log_count_dict.values().copied().collect::<Vec<_>>())
     } else {
+        Array1::zeros(epi_dist_array.len())
+    };
+    let epi_log_conc_array = if use_counts_concs {
+        Array1::from(epi_log_conc_dict.values().copied().collect::<Vec<_>>())
+    } else {
+        Array1::zeros(epi_dist_array.len())
+    };
 
-        let epi_dist_dict_ref = &epi_dist_dict_arc;
-        let epi_kd_dict_ref = &epi_kd_dict_arc;
 
-        log_Kinv_dict = gamma_d_values
-            .par_iter()
-            .flat_map(|&gamma_d_value| {
+    // Check that all arrays have the same length
+    assert_eq!(epi_dist_array.len(), epi_kd_array.len());
+    assert_eq!(epi_dist_array.len(), epi_log_count_array.len());
+    assert_eq!(epi_dist_array.len(), epi_log_conc_array.len());
 
-                let epi_dist_dict_ref = &epi_dist_dict_ref;
-                let epi_kd_dict_ref = &epi_kd_dict_ref;
+    // Apply the natural logarithm to epi_kd_array, replacing zero values with KD_THRESHOLD
+    let epi_log_kd_array = epi_kd_array.mapv(|kd| {
+        let kd_safe = if kd == 0.0 { KD_THRESHOLD } else { kd };
+        kd_safe.ln()
+    });
 
-                gamma_logkd_values.par_iter().map(move |&gamma_logKd_value| {
-                    let mut values = Vec::with_capacity(epi_dist_dict_ref.len());
-                    for (epi, &dist) in epi_dist_dict_ref.iter() {
-                        if dist < d_PS_threshold && dist > d_NS_cutoff {
-                            if let Some(&kd) = epi_kd_dict_ref.get(epi) {
-                                let value =
-                                    -gamma_d_value * dist * gamma_d_coeff - gamma_logKd_value * kd.ln();
-                                values.push(value);
-                            }
+    // Masking based on PS and NS thresholds on distances
+    let mask = &epi_dist_array.map(|&x| x < d_PS_threshold) & epi_dist_array.map(|&x| x > d_NS_cutoff);
+
+    // Ensure mask is of the same length as the arrays
+    assert_eq!(mask.len(), epi_dist_array.len());
+
+    let epi_dist_array_masked = &epi_dist_array * &mask.map(|&x| if x { 1.0 } else { 0.0 });
+    let epi_log_kd_array_masked = &epi_log_kd_array * &mask.map(|&x| if x { 1.0 } else { 0.0 });
+    let epi_log_count_array_masked = &epi_log_count_array * &mask.map(|&x| if x { 1.0 } else { 0.0 });
+    let epi_log_conc_array_masked = &epi_log_conc_array * &mask.map(|&x| if x { 1.0 } else { 0.0 });
+
+    // Ensure masked arrays are of the same length
+    assert_eq!(epi_dist_array_masked.len(), epi_log_kd_array_masked.len());
+    assert_eq!(epi_dist_array_masked.len(), epi_log_count_array_masked.len());
+    assert_eq!(epi_dist_array_masked.len(), epi_log_conc_array_masked.len());
+
+    // Clone the arrays inside Arc
+    let epi_dist_array_masked_arc = Arc::new(epi_dist_array_masked.clone());
+    let epi_log_kd_array_masked_arc = Arc::new(epi_log_kd_array_masked.clone());
+    let epi_log_count_array_masked_arc = Arc::new(epi_log_count_array_masked.clone());
+    let epi_log_conc_array_masked_arc = Arc::new(epi_log_conc_array_masked.clone());
+
+    let log_Kinv_dict: HashMap<String, Option<(f64, f64)>> = gamma_d_values
+        .par_iter()
+        .flat_map(|&gamma_d_value| {
+            let epi_dist_array_masked = Arc::as_ref(&epi_dist_array_masked_arc);
+            let epi_log_kd_array_masked = Arc::as_ref(&epi_log_kd_array_masked_arc);
+            let epi_log_count_array_masked = Arc::as_ref(&epi_log_count_array_masked_arc);
+            let epi_log_conc_array_masked = Arc::as_ref(&epi_log_conc_array_masked_arc);
+
+            gamma_logkd_values
+                .par_iter()
+                .map(move |&gamma_logKd_value| {
+                    // Compute individual components
+                    let comp1 = -gamma_d_value * epi_dist_array_masked * gamma_d_coeff;
+                    let comp2 = - gamma_logKd_value * epi_log_kd_array_masked;
+                    let comp3 = epi_log_count_array_masked.clone();
+                    let comp4 = epi_log_conc_array_masked.clone();
+
+                    // Function to check and print infinity values in the components
+                    // fn check_infinity(component: &Array1<f64>, name: &str) {
+                    //     let mut infinity_count = 0;
+                    //     let mut neg_infinity_count = 0;
+                    //     for (index, &value) in component.iter().enumerate() {
+                    //         if value == f64::INFINITY {
+                    //             println!("{} - Index {}: INFINITY", name, index);
+                    //             infinity_count += 1;
+                    //         }
+                    //         if value == f64::NEG_INFINITY {
+                    //             println!("{} - Index {}: -INFINITY", name, index);
+                    //             neg_infinity_count += 1;
+                    //         }
+                    //     }
+                    //     if infinity_count > 0 || neg_infinity_count > 0 {
+                    //         println!(
+                    //             "Error: {} contains Infinity values. INFINITY count: {}, -INFINITY count: {}",
+                    //             name, infinity_count, neg_infinity_count
+                    //         );
+                    //         panic!(
+                    //             "Error: {} contains Infinity values. INFINITY count: {}, -INFINITY count: {}",
+                    //             name, infinity_count, neg_infinity_count
+                    //         );
+                    //     }
+                    // }
+
+                    // // Check for infinity in each component
+                    // check_infinity(&comp1, "comp1");
+                    // check_infinity(&comp2, "comp2");
+                    // check_infinity(&comp3, "comp3");
+                    // check_infinity(&comp4, "comp4");
+
+                    // Compute final values
+                    let values = comp1 + comp2 + comp3 + comp4;
+
+                    let values_slice = values.as_slice().unwrap();
+
+                    let result = match log_sum(values_slice) {
+                        Ok(result) => result,
+                        Err(err) => {
+                            panic!("Error calculating log sum: {:?}", err);
                         }
-                    }
-                    let result = log_sum(&values); // log_Kinv or "logZ"
-                    let entropy = if let Some(result) = result {
-                        compute_entropy(&values, result)
-                    } else {
-                        None
+                    };
+                    let entropy = match compute_entropy(values_slice, result) {
+                        Some(entropy) => entropy,
+                        None => {
+                            panic!("Error calculating entropy: entropy value is None.");
+                        }
                     };
                     let key = tuple_to_string(&(gamma_d_value, gamma_logKd_value));
-                    (key, Some((result.unwrap_or(0.0), entropy.unwrap_or(0.0))))
-                }) 
-            })
-            .collect();
-    }
+                    (key, Some((result, entropy)))
+                })
+        })
+        .collect();
 
     log_Kinv_dict
 }
+
+
+
 
 pub fn compute_logCh_dict_rs(
     epi_kd_dict: &HashMap<String, f64>,
@@ -408,10 +477,11 @@ pub fn compute_logCh_dict_rs(
                     }
                 }
 
-                let log_sum_values = log_sum(&values);
-                let result = match log_sum_values {
-                    Some(sum) => log_n_wt - log_h_num - sum,
-                    None => return (gamma_logKd_value.to_string(), None),
+                let result = match log_sum(&values) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        panic!("Error calculating log sum: {:?}", err);
+                    }
                 };
                 let key = gamma_logKd_value.to_string();
                 (key, Some(result))
@@ -432,10 +502,11 @@ pub fn compute_logCh_dict_rs(
                     values.push(value); 
                 }
 
-                let log_sum_values = log_sum(&values);
-                let result = match log_sum_values {
-                    Some(sum) => log_n_wt - log_h_num - sum,
-                    None => return (gamma_logKd_value.to_string(), None),
+                let result = match log_sum(&values) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        panic!("Error calculating log sum: {:?}", err);
+                    }
                 };
                 let key = gamma_logKd_value.to_string();
                 (key, Some(result))
