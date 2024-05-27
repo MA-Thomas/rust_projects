@@ -266,27 +266,59 @@ pub fn log_sum(v: &[f64]) -> Result<f64, InputError> {
 }
 
 
+#[derive(Debug)]
+enum EntropyError {
+    NaN,
+    Infinite,
+    InvalidProb,
+}
 
-pub fn compute_entropy(v: &[f64], log_z: f64) -> Option<f64> {
+fn compute_entropy(v: &[f64], log_z: f64) -> Result<f64, EntropyError> {
     // Calculate the probabilities by exponentiating each value in the vector
     let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
 
     // Calculate the entropy
-    let entropy = probs.iter().filter_map(|&prob| {
+    let entropy_args = probs.iter().map(|&prob| {
         if prob > 0.0 {
-            Some(-prob * prob.ln()) // Avoid NaN for 0 probability
+            Ok(-prob * prob.ln()) 
         } else {
-            None
-        }
-    }).sum::<f64>();
+            Err(EntropyError::InvalidProb)
+        } 
+    }).collect::<Result<Vec<_>, _>>()?;
 
-    // Check if entropy is NaN or infinite
-    if entropy.is_nan() || entropy.is_infinite() {
-        None
+    // Sum up the entropy
+    let entropy_sum: f64 = entropy_args.iter().sum();
+
+    // Check if entropy is infinite
+    if entropy_sum.is_infinite() {
+        Err(EntropyError::Infinite)
+    } else if entropy_sum.is_nan() {
+        Err(EntropyError::NaN)
     } else {
-        Some(entropy)
+        Ok(entropy_sum)
     }
 }
+
+// pub fn compute_entropy(v: &[f64], log_z: f64) -> Option<f64> {
+//     // Calculate the probabilities by exponentiating each value in the vector
+//     let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
+
+//     // Calculate the entropy
+//     let entropy = probs.iter().filter_map(|&prob| {
+//         if prob > 0.0 {
+//             Some(-prob * prob.ln()) // Avoid NaN for 0 probability
+//         } else {
+//             None
+//         }
+//     }).sum::<f64>();
+
+//     // Check if entropy is NaN or infinite
+//     if entropy.is_nan() || entropy.is_infinite() {
+//         None
+//     } else {
+//         Some(entropy)
+//     }
+// }
 
 
 pub fn compute_logKinv_and_entropy_dict_rs(
@@ -382,11 +414,27 @@ pub fn compute_logKinv_and_entropy_dict_rs(
                         }
                     };
                     let entropy = match compute_entropy(values_slice, result) {
-                        Some(entropy) => entropy,
-                        None => {
-                            panic!("Error calculating entropy: entropy value is None.");
+                        Ok(entropy) => entropy,
+                        Err(error) => {
+                            match error {
+                                EntropyError::NaN => {
+                                    panic!("Error calculating entropy: entropy value is NaN.");
+                                }
+                                EntropyError::Infinite => {
+                                    panic!("Error calculating entropy: entropy value is Infinite.");
+                                }
+                                EntropyError::InvalidProb => {
+                                    panic!("Error calculating entropy: invalid probability encountered.");
+                                }
+                            }
                         }
                     };
+                    // let entropy = match compute_entropy(values_slice, result) {
+                    //     Some(entropy) => entropy,
+                    //     None => {
+                    //         panic!("Error calculating entropy: entropy value is None.");
+                    //     }
+                    // };
                     let key = tuple_to_string(&(gamma_d_value, gamma_logKd_value));
                     (key, Some((result, entropy)))
                 })
