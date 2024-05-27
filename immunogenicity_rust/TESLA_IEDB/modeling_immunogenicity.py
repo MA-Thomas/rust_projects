@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("-tesla_variables_dir", default="/Users/experimental/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/experimental/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
     
-    parser.add_argument("-allele", default='A0101')
+    parser.add_argument("-allele", default='A0201')
 
     parser.add_argument("-inclusive_start_ind", default="0")
     parser.add_argument("-inclusive_end_ind", default="10")
