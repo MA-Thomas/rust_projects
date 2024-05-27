@@ -32,10 +32,9 @@ mod lib_io;
 use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, load_epitopes_distances_from_tar_gz, load_epitopes_kds_from_tar_gz}; 
 
 mod lib_rust_function_versions;
-use lib_rust_function_versions::{compute_distances_from_query_rs, compute_gamma_d_coeff_rs, 
+use lib_rust_function_versions::{compute_gamma_d_coeff_rs, 
     process_distance_info_vec_rs, process_kd_info_vec_rs, 
-    log_sum, compute_entropy, compute_logKinv_and_entropy_dict_rs,
-    compute_logCh_dict_rs};
+    compute_logKinv_and_entropy_dict_rs, compute_logCh_dict_rs};
 /////////////////////////////////////////////////////////////////////////
 ////////////////////////////z/////////////////////////////////////////////
 
@@ -246,10 +245,6 @@ fn compute_distances_from_query_py(query_epi: &str,
                                 save_csv_file: Option<&str>) -> PyResult<(HashMap<String, f64>, u64)> {
 
     let start_time = std::time::Instant::now();
-    // let mut epitopes_distances = Vec::new();
-    let mut epitopes_distances: Vec<TargetEpiDistances> = Vec::new();
-    // let mut epi_dist_dict = HashMap::new(); // Change to HashMap
-    let mut epi_dist_dict: HashMap<String, f64> = HashMap::new();
 
     let dm_type = match dist_metric {
         "hamming" =>  DistanceMetricType::hamming,
@@ -286,19 +281,6 @@ fn compute_distances_from_query_py(query_epi: &str,
         Err(err) => return Err(PyErr::new::<PyException, _>(format!("Error: {}", err))),
     };
 
-    // for target_epi in &target_epitopes {
-    //     let (distance, invalid_epitopes) = match distance_context.epitope_dist(query_epi, target_epi) {
-    //         Ok((dist, invalid)) => (dist, invalid),
-    //         Err(err) => return Err(PyErr::new::<PyException, _>(format!("Error: {}", err))),
-    //     };
-
-    //     epitopes_distances.push(TargetEpiDistances {
-    //         epitope: target_epi.clone(),
-    //         distance: distance,
-    //     });
-    //     epi_dist_dict.insert(target_epi.clone(), distance); // Insert into the HashMap
-    // }
-
     // Parallel Version
     let epitopes_distances: Result<Vec<TargetEpiDistances>, PyErr> = target_epitopes.par_iter() // Parallel iterator
     .map(|target_epi| {
@@ -311,6 +293,7 @@ fn compute_distances_from_query_py(query_epi: &str,
         }
     })
     .collect();
+
     // Check if there were any errors during computation
     let epitopes_distances = match epitopes_distances {
         Ok(distances) => distances,
@@ -344,126 +327,6 @@ fn have_same_keys(map1: &HashMap<String, f64>, map2: &HashMap<String, f64>) -> b
     keys1 == keys2
 }
 
-// #[pyfunction]
-// pub fn compute_log_non_rho_terms_py(query_epi: &str, 
-//     dist_file_info: Vec<(&str, bool, &str)>,
-//     kd_file_path: &str,
-//     dist_metric: &str, 
-//     data_matrix_dir: &str, 
-//     max_target_num: usize,
-//     gamma_d_values: Vec<f64>,
-//     gamma_logkd_values: Vec<f64>,
-//     d_PS_threshold: f64,
-//     d_NS_cutoff: f64,
-//     compute_logKinv_and_entropy: bool, compute_logCh: bool) -> PyResult<(HashMap<String, Option<(f64, f64)>>, HashMap<String, Option<f64>>, u64)> {
-
-//     // let start_time = std::time::Instant::now();
-
-//     //////////    PREPROCESSING    /////////
-//     // Load or Generate Distances from Query into HashMap
-//     let epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
-//         Ok(epi_dist_dict) => {
-//             println!("[rust] Distance processing succeeded.");
-//             epi_dist_dict
-//         },
-//         Err(err) => return Err(pyo3::exceptions::PyValueError::new_err(format!("Error processing distances: {}", err))),
-//     };
-
-//     // Load Kds from Query into HashMap
-//     let epi_kd_dict = match process_kd_info_vec_rs(&kd_file_path) {
-//         Ok(epi_kd_dict) => {
-//             println!("[rust] Kds processing succeeded.");
-//             epi_kd_dict
-//         },
-//         Err(err) => return Err(pyo3::exceptions::PyValueError::new_err(format!("Error processing Kds: {}", err))),
-//     };
-
-//     // Check if both HashMaps have the same keys
-//     if !have_same_keys(&epi_dist_dict, &epi_kd_dict) {
-//         return Err(pyo3::exceptions::PyValueError::new_err("The keys of epi_dist_dict and epi_kd_dict do not match."));
-//     }
-
-
-//     // Handle Counts and Concs into HashMap (in future, may choose to load these values).
-//     /*
-//         For self epitopes, the count is the number of times the 9-mer (or n-mer) epitope appears 
-//         in the genome - whether the degeneracy is within a gene, across genes, or both.
-//         For non self epitopes, the count is 1.
-//         For self epitopes, the conc is the concentration of the 9-mer (or n-mer) and is based on 
-//         cTEC gene expression in the Thymus during positive selection of T-cells.
-//         For non self epitopes, the conc is 1.
-
-//         For now, assume both are always 1 (log value=0).
-//         (These are not relevant for nonself epitopes but the value 1 is ok for use in compute_logKinv_and_entropy_dict_rs(). )
-//      */
-//     let mut epi_log_count_dict = HashMap::with_capacity(epi_kd_dict.len());
-//     let mut epi_log_conc_dict = HashMap::with_capacity(epi_kd_dict.len());
-//     for key in epi_kd_dict.keys() {
-//         epi_log_count_dict.insert(key.clone(), 0.0);
-//         epi_log_conc_dict.insert(key.clone(), 0.0);
-//     }
-//     let use_counts_concs: bool = false;
-
-//     // Compute gamma_d_coeff
-//     let gamma_d_coeff_result = compute_gamma_d_coeff_rs(dist_metric, data_matrix_dir);
-//     let gamma_d_coeff: f64;
-//     match gamma_d_coeff_result {
-//         Ok(coeff) => {
-//             gamma_d_coeff = coeff;
-//             // Use gamma_d_coeff here
-//             println!("Gamma D coefficient: {}", gamma_d_coeff);
-//         }
-//         Err(err) => {
-//             // Handle the error
-//             eprintln!("Error: {}", err);
-//             let py_err = PyRuntimeError::new_err(err); // Create a PyErr from the string error message
-//             return Err(py_err);
-//         }
-//     }
-
-//     //////////    MODEL COMPUTATIONS    /////////
-//     let start_time = std::time::Instant::now();
-//     let mut logKinv_entropy_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
-//     let mut logCh_dict: HashMap<String, Option<f64>> = HashMap::new();
-
-//     if compute_logKinv_and_entropy {
-
-//         logKinv_entropy_dict = compute_logKinv_and_entropy_dict_rs(
-//             &epi_dist_dict,
-//             &epi_kd_dict,
-//             &epi_log_count_dict,
-//             &epi_log_conc_dict,
-//             &gamma_d_values,
-//             &gamma_logkd_values,
-//             gamma_d_coeff,
-//             d_PS_threshold,
-//             d_NS_cutoff,
-//             use_counts_concs,
-//         );
-
-//         let log_n_wt = 9.2103; // log(10,000) because 10,000 is the number of MHC molecules per cell.
-//         let log_h_num = 1.7917; // log(6) because there are 6 HLAs per person.
-//         if compute_logCh {
-//             logCh_dict = compute_logCh_dict_rs(
-//                 &epi_kd_dict,
-//                 &epi_log_count_dict,
-//                 &epi_log_conc_dict,
-//                 &gamma_logkd_values,
-//                 log_n_wt,
-//                 log_h_num,
-//                 use_counts_concs,
-//             );
-//         }
-
-
-//     }
-
-
-
-//     let end_time = start_time.elapsed().as_secs_f64() as u64;
-//     Ok((logKinv_entropy_dict, logCh_dict, end_time)) 
-  
-// }
 
 
 #[pyfunction]
