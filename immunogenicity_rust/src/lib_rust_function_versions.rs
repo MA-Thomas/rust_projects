@@ -225,18 +225,6 @@ pub fn process_kd_info_vec_rs(csv_kds_file_path: &str) -> Result<HashMap<String,
 
 
 
-// pub fn log_sum(v: &[f64]) -> Option<f64> {
-//     if let Some(&ma) = v.iter().max_by(|&&a, &&b| a.partial_cmp(&b).unwrap()) {
-//         if ma == f64::NEG_INFINITY {
-//             Some(f64::NEG_INFINITY)
-//         } else {
-//             let sum_exp = v.iter().map(|&x| (x - ma).exp()).sum::<f64>();
-//             Some(sum_exp.ln() + ma)
-//         }
-//     } else {
-//         None
-//     }
-// }
 // Define a custom error type for NaN or infinity values
 #[derive(Debug)]
 struct InputError(&'static str);
