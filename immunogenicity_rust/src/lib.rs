@@ -245,10 +245,6 @@ fn compute_distances_from_query_py(query_epi: &str,
                                 save_csv_file: Option<&str>) -> PyResult<(HashMap<String, f64>, u64)> {
 
     let start_time = std::time::Instant::now();
-    // let mut epitopes_distances = Vec::new();
-    let mut epitopes_distances: Vec<TargetEpiDistances> = Vec::new();
-    // let mut epi_dist_dict = HashMap::new(); // Change to HashMap
-    let mut epi_dist_dict: HashMap<String, f64> = HashMap::new();
 
     let dm_type = match dist_metric {
         "hamming" =>  DistanceMetricType::hamming,
