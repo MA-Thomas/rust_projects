@@ -285,19 +285,6 @@ fn compute_distances_from_query_py(query_epi: &str,
         Err(err) => return Err(PyErr::new::<PyException, _>(format!("Error: {}", err))),
     };
 
-    // for target_epi in &target_epitopes {
-    //     let (distance, invalid_epitopes) = match distance_context.epitope_dist(query_epi, target_epi) {
-    //         Ok((dist, invalid)) => (dist, invalid),
-    //         Err(err) => return Err(PyErr::new::<PyException, _>(format!("Error: {}", err))),
-    //     };
-
-    //     epitopes_distances.push(TargetEpiDistances {
-    //         epitope: target_epi.clone(),
-    //         distance: distance,
-    //     });
-    //     epi_dist_dict.insert(target_epi.clone(), distance); // Insert into the HashMap
-    // }
-
     // Parallel Version
     let epitopes_distances: Result<Vec<TargetEpiDistances>, PyErr> = target_epitopes.par_iter() // Parallel iterator
     .map(|target_epi| {
@@ -310,6 +297,7 @@ fn compute_distances_from_query_py(query_epi: &str,
         }
     })
     .collect();
+
     // Check if there were any errors during computation
     let epitopes_distances = match epitopes_distances {
         Ok(distances) => distances,
