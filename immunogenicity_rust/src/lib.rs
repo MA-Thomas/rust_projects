@@ -33,8 +33,8 @@ use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, load_epitopes_dista
 
 mod lib_rust_function_versions;
 use lib_rust_function_versions::{compute_gamma_d_coeff_rs, 
-    process_distance_info_vec_rs, process_kd_info_vec_rs, compute_logKinv_and_entropy_dict_rs,
-    compute_logCh_dict_rs};
+    process_distance_info_vec_rs, process_kd_info_vec_rs, 
+    compute_logKinv_and_entropy_dict_rs, compute_logCh_dict_rs};
 /////////////////////////////////////////////////////////////////////////
 ////////////////////////////z/////////////////////////////////////////////
 
