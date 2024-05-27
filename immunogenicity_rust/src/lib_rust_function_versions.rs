@@ -275,30 +275,24 @@ enum EntropyError {
 
 fn compute_entropy(v: &[f64], log_z: f64) -> Result<f64, EntropyError> {
     // Calculate the probabilities by exponentiating each value in the vector
-    let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
-
-    // Calculate the entropy
-    let entropy_args = probs.iter().map(|&prob| {
+    let entropy_sum = v.iter().try_fold(0.0, |acc, &val| {
+        let prob = E.powf(val - log_z);
         if prob > 0.0 {
-            Ok(-prob * prob.ln()) 
-        } else {
+            Ok(acc - prob * prob.ln()) // Avoid NaN for 0 probability
+        } else if prob == 0.0 {
             Err(EntropyError::InvalidProb)
-        } 
-    }).collect::<Result<Vec<_>, _>>()?;
-
-    // Sum up the entropy
-    let entropy_sum: f64 = entropy_args.iter().sum();
+        } else {
+            Err(EntropyError::NaN)
+        }
+    })?;
 
     // Check if entropy is infinite
     if entropy_sum.is_infinite() {
         Err(EntropyError::Infinite)
-    } else if entropy_sum.is_nan() {
-        Err(EntropyError::NaN)
     } else {
         Ok(entropy_sum)
     }
 }
-
 // pub fn compute_entropy(v: &[f64], log_z: f64) -> Option<f64> {
 //     // Calculate the probabilities by exponentiating each value in the vector
 //     let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
