@@ -265,54 +265,33 @@ pub fn log_sum(v: &[f64]) -> Result<f64, InputError> {
     }
 }
 
-
 #[derive(Debug)]
 enum EntropyError {
     NaN,
     Infinite,
-    InvalidProb,
+    InvalidDistribution,
 }
-
 fn compute_entropy(v: &[f64], log_z: f64) -> Result<f64, EntropyError> {
     // Calculate the probabilities by exponentiating each value in the vector
-    let entropy_sum = v.iter().try_fold(0.0, |acc, &val| {
-        let prob = E.powf(val - log_z);
-        if prob > 0.0 {
-            Ok(acc - prob * prob.ln()) // Avoid NaN for 0 probability
-        } else if prob == 0.0 {
-            Err(EntropyError::InvalidProb)
-        } else {
-            Err(EntropyError::NaN)
-        }
-    })?;
+    let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
 
-    // Check if entropy is infinite
-    if entropy_sum.is_infinite() {
+    // Check if any probability is less than or equal to 0
+    if probs.iter().any(|&prob| prob <= 0.0) {
+        return Err(EntropyError::InvalidDistribution);
+    }
+
+    // Calculate the entropy
+    let entropy = probs.iter().map(|&prob| -prob * prob.ln()).sum::<f64>();
+
+    // Check if entropy is NaN or infinite
+    if entropy.is_nan() {
+        Err(EntropyError::NaN)
+    } else if entropy.is_infinite() {
         Err(EntropyError::Infinite)
     } else {
-        Ok(entropy_sum)
+        Ok(entropy)
     }
 }
-// pub fn compute_entropy(v: &[f64], log_z: f64) -> Option<f64> {
-//     // Calculate the probabilities by exponentiating each value in the vector
-//     let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
-
-//     // Calculate the entropy
-//     let entropy = probs.iter().filter_map(|&prob| {
-//         if prob > 0.0 {
-//             Some(-prob * prob.ln()) // Avoid NaN for 0 probability
-//         } else {
-//             None
-//         }
-//     }).sum::<f64>();
-
-//     // Check if entropy is NaN or infinite
-//     if entropy.is_nan() || entropy.is_infinite() {
-//         None
-//     } else {
-//         Some(entropy)
-//     }
-// }
 
 
 pub fn compute_logKinv_and_entropy_dict_rs(
@@ -417,7 +396,7 @@ pub fn compute_logKinv_and_entropy_dict_rs(
                                 EntropyError::Infinite => {
                                     panic!("Error calculating entropy: entropy value is Infinite.");
                                 }
-                                EntropyError::InvalidProb => {
+                                EntropyError::InvalidDistribution => {
                                     panic!("Error calculating entropy: invalid probability encountered.");
                                 }
                             }
