@@ -315,7 +315,7 @@ pub fn compute_logKinv_and_entropy_dict_rs(
 
     const KD_THRESHOLD: f64 = 1e-10;
 
-    // Convert HashMap values to arrays
+    // Convert HashMap values to arrays. Key order is preserved among all four arrays.
     let epi_dist_array = Array1::from(epi_dist_dict.values().copied().collect::<Vec<_>>());
     let epi_kd_array = Array1::from(epi_kd_dict.values().copied().collect::<Vec<_>>());
     let epi_log_count_array = if use_counts_concs {
@@ -357,7 +357,7 @@ pub fn compute_logKinv_and_entropy_dict_rs(
     assert_eq!(epi_dist_array_masked.len(), epi_log_count_array_masked.len());
     assert_eq!(epi_dist_array_masked.len(), epi_log_conc_array_masked.len());
 
-    // Clone the arrays inside Arc
+    // Clone the arrays inside Arc (Ensures that the shared data is safely accessible across parallel threads without unnecessary cloning.)
     let epi_dist_array_masked_arc = Arc::new(epi_dist_array_masked.clone());
     let epi_log_kd_array_masked_arc = Arc::new(epi_log_kd_array_masked.clone());
     let epi_log_count_array_masked_arc = Arc::new(epi_log_count_array_masked.clone());
@@ -366,6 +366,11 @@ pub fn compute_logKinv_and_entropy_dict_rs(
     let log_Kinv_dict: HashMap<String, Option<(f64, f64)>> = gamma_d_values
         .par_iter()
         .flat_map(|&gamma_d_value| {
+            /*
+            Note: Arc::as_ref() is called next to obtain an immutable reference to the data inside the Arc. 
+            This is necessary because the computation inside the .par_iter() closure needs to access the actual arrays, 
+            not the Arc wrapper itself.
+             */
             let epi_dist_array_masked = Arc::as_ref(&epi_dist_array_masked_arc);
             let epi_log_kd_array_masked = Arc::as_ref(&epi_log_kd_array_masked_arc);
             let epi_log_count_array_masked = Arc::as_ref(&epi_log_count_array_masked_arc);
@@ -377,46 +382,11 @@ pub fn compute_logKinv_and_entropy_dict_rs(
                     // Compute individual components
                     let comp1 = -gamma_d_value * epi_dist_array_masked * gamma_d_coeff;
                     let comp2 = - gamma_logKd_value * epi_log_kd_array_masked;
-                    let comp3 = epi_log_count_array_masked.clone();
-                    let comp4 = epi_log_conc_array_masked.clone();
+                    let comp3 = epi_log_count_array_masked;
+                    let comp4 = epi_log_conc_array_masked;
 
-                    // Function to check and print infinity values in the components
-                    // fn check_infinity(component: &Array1<f64>, name: &str) {
-                    //     let mut infinity_count = 0;
-                    //     let mut neg_infinity_count = 0;
-                    //     for (index, &value) in component.iter().enumerate() {
-                    //         if value == f64::INFINITY {
-                    //             println!("{} - Index {}: INFINITY", name, index);
-                    //             infinity_count += 1;
-                    //         }
-                    //         if value == f64::NEG_INFINITY {
-                    //             println!("{} - Index {}: -INFINITY", name, index);
-                    //             neg_infinity_count += 1;
-                    //         }
-                    //     }
-                    //     if infinity_count > 0 || neg_infinity_count > 0 {
-                    //         println!(
-                    //             "Error: {} contains Infinity values. INFINITY count: {}, -INFINITY count: {}",
-                    //             name, infinity_count, neg_infinity_count
-                    //         );
-                    //         panic!(
-                    //             "Error: {} contains Infinity values. INFINITY count: {}, -INFINITY count: {}",
-                    //             name, infinity_count, neg_infinity_count
-                    //         );
-                    //     }
-                    // }
-
-                    // // Check for infinity in each component
-                    // check_infinity(&comp1, "comp1");
-                    // check_infinity(&comp2, "comp2");
-                    // check_infinity(&comp3, "comp3");
-                    // check_infinity(&comp4, "comp4");
-
-                    // Compute final values
                     let values = comp1 + comp2 + comp3 + comp4;
-
                     let values_slice = values.as_slice().unwrap();
-
                     let result = match log_sum(values_slice) {
                         Ok(result) => result,
                         Err(err) => {

@@ -47,7 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("-allele", default='A0101')
 
     parser.add_argument("-inclusive_start_ind", default="0")
-    parser.add_argument("-inclusive_end_ind", default="10")
+    parser.add_argument("-inclusive_end_ind", default="0")
     args = parser.parse_args()
 
 
