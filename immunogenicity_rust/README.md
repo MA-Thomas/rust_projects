@@ -1,7 +1,7 @@
 /TESLA_IEDB/modeling_and_aucs.py is the python script that calls rust functions.
 
 /src/lib.rs is the main rust library. 
-Auxiliary functions are in /src/lib_io.rs and /src/lib_rust_function_versions.rs 
+Auxiliary functions are in /src/lib_io.rs, /src/lib_rust_function_versions.rs, etc. 
 
 Notes:
 Distances calculations to self epitope set takes <20s per query epitope.
