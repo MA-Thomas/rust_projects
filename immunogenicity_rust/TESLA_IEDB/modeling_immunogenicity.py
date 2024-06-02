@@ -20,7 +20,22 @@ def create_evenly_spaced_list(L, U, N):
     return np.linspace(L, U, N).tolist()
 def create_log_spaced_list(L, U, N):
     return np.logspace(np.log10(L), np.log10(U), N).tolist()
+HLAA = ['HLA-A0101', 'HLA-A0201', 'HLA-A0202', 'HLA-A0203', 'HLA-A0205', 'HLA-A0206', 'HLA-A0207', 'HLA-A0211',
+        'HLA-A0212', 'HLA-A0216', 'HLA-A0217', 'HLA-A0219', 'HLA-A0250', 'HLA-A0301', 'HLA-A0302', 'HLA-A0319',
+        'HLA-A1101', 'HLA-A2301', 'HLA-A2402', 'HLA-A2403', 'HLA-A2501', 'HLA-A2601', 'HLA-A2602', 'HLA-A2603',
+        'HLA-A2902', 'HLA-A3001', 'HLA-A3002', 'HLA-A3101', 'HLA-A3201', 'HLA-A3207', 'HLA-A3215', 'HLA-A3301',
+        'HLA-A6601', 'HLA-A6801', 'HLA-A6802', 'HLA-A6823', 'HLA-A6901', 'HLA-A8001']
 
+HLAB = ['HLA-B0702', 'HLA-B0801', 'HLA-B0802', 'HLA-B0803', 'HLA-B1401', 'HLA-B1402', 'HLA-B1501', 'HLA-B1502',
+        'HLA-B1503', 'HLA-B1509', 'HLA-B1517', 'HLA-B1801', 'HLA-B2705', 'HLA-B2720', 'HLA-B3501', 'HLA-B3503',
+        'HLA-B3701', 'HLA-B3801', 'HLA-B3901', 'HLA-B4001', 'HLA-B4002', 'HLA-B4013', 'HLA-B4201', 'HLA-B4402',
+        'HLA-B4403', 'HLA-B4501', 'HLA-B4506', 'HLA-B4601', 'HLA-B4801', 'HLA-B5101', 'HLA-B5301', 'HLA-B5401',
+        'HLA-B5701', 'HLA-B5703', 'HLA-B5801', 'HLA-B5802', 'HLA-B7301', 'HLA-B8101', 'HLA-B8301']
+
+HLAC = ['HLA-C0303', 'HLA-C0401', 'HLA-C0501', 'HLA-C0602', 'HLA-C0701', 'HLA-C0702', 'HLA-C0802', 'HLA-C1203',
+        'HLA-C1402', 'HLA-C1502']
+
+HLA = HLAA + HLAB + HLAC
 
 if __name__ == "__main__":
 
@@ -44,10 +59,10 @@ if __name__ == "__main__":
     parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
     
-    parser.add_argument("-allele", default='A0101')
+    parser.add_argument("-allele", default='A2301')
 
     parser.add_argument("-inclusive_start_ind", default="0")
-    parser.add_argument("-inclusive_end_ind", default="0")
+    parser.add_argument("-inclusive_end_ind", default="89")
     args = parser.parse_args()
 
 
@@ -68,7 +83,7 @@ if __name__ == "__main__":
 
     '''
     #epidist_blosum62_distance #all_tcr_all_combos_model #hamming
-    distance_metric = "all_tcr_all_combos_model" 
+    distance_metric = args.distance_metric_type #"all_tcr_all_combos_model" 
     max_target_num = 20000000 
 
     save_query_distance_files = False 
@@ -120,8 +135,8 @@ if __name__ == "__main__":
     csv_OImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_Imm/epitopes_Kd_values_"+hla+".csv")
     csv_ONImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_nonImm/epitopes_Kd_values_"+hla+".csv")
     
-    for idx, (row_index,row) in enumerate(hla_df.iterrows()):
-        print("idx = ",idx)
+    for idx, (df_index,row) in enumerate(hla_df.iterrows()):
+        print("idx = ",idx, flush=True)
         if idx < inclusive_start_ind:
             continue
         if idx > inclusive_end_ind:

@@ -1,6 +1,13 @@
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
+use ndarray::{Array1, ArrayBase, OwnedRepr, Dim};
+
 /////////////////////////////////////////////////////////////////////////
 ////////////   Import from other scripts via the main module.   //////////////
 use crate::*; // Import from the main module (lib.rs)
+use crate::lib_data_structures_auxiliary_functions::{DistanceMetricType, DistanceMetricContext, TargetEpiDistances, tuple_to_string};
+use lib_io::{set_json_path, evaluate_context};
+use lib_math_functions::{EntropyError, log_sum, compute_entropy};
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
@@ -225,73 +232,6 @@ pub fn process_kd_info_vec_rs(csv_kds_file_path: &str) -> Result<HashMap<String,
 
 
 
-// Define a custom error type for NaN or infinity values
-#[derive(Debug)]
-struct InputError(&'static str);
-
-// Implement std::fmt::Display trait for InputError
-use std::fmt;
-impl fmt::Display for InputError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-// Implement std::error::Error trait for InputError
-use std::error::Error;
-impl Error for InputError {}
-use std::num::ParseFloatError;
-pub fn log_sum(v: &[f64]) -> Result<f64, InputError> {
-    if v.is_empty() {
-        // If the input slice is empty, return negative infinity
-        return Ok(f64::NEG_INFINITY);
-    }
-
-    // Check for NaN or infinity values in the input slice
-    if v.iter().any(|&x| x.is_nan() || x == f64::INFINITY || x == f64::NEG_INFINITY) {
-        // Return an error indicating that the input contains NaN or infinity values
-        return Err(InputError("Input contains NaN or INFINITY values"));
-    }
-
-    // Find the maximum value among the input values
-    let ma = *v.iter().max_by(|&&a, &&b| a.partial_cmp(&b).unwrap()).unwrap();
-
-    if ma == f64::NEG_INFINITY {
-        // If the maximum value is negative infinity, return negative infinity
-        Ok(f64::NEG_INFINITY)
-    } else {
-        // Calculate the sum of exponential values relative to the maximum value
-        let sum_exp = v.iter().map(|&x| (x - ma).exp()).sum::<f64>();
-        Ok(sum_exp.ln() + ma)
-    }
-}
-
-#[derive(Debug)]
-enum EntropyError {
-    NaN,
-    Infinite,
-    InvalidDistribution,
-}
-fn compute_entropy(v: &[f64], log_z: f64) -> Result<f64, EntropyError> {
-    // Calculate the probabilities by exponentiating each value in the vector
-    let probs: Vec<f64> = v.iter().map(|val| E.powf(val - log_z)).collect();
-
-    // Check if any probability is less than or equal to 0
-    if probs.iter().any(|&prob| prob <= 0.0) {
-        return Err(EntropyError::InvalidDistribution);
-    }
-
-    // Calculate the entropy
-    let entropy = probs.iter().map(|&prob| -prob * prob.ln()).sum::<f64>();
-
-    // Check if entropy is NaN or infinite
-    if entropy.is_nan() {
-        Err(EntropyError::NaN)
-    } else if entropy.is_infinite() {
-        Err(EntropyError::Infinite)
-    } else {
-        Ok(entropy)
-    }
-}
 
 
 pub fn compute_logKinv_and_entropy_dict_rs(
@@ -496,3 +436,5 @@ pub fn compute_logCh_dict_rs(
 
     log_Ch_dict
 }
+
+

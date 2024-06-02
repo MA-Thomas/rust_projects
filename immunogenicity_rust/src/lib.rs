@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use std::fs::{File, remove_file, create_dir_all};
 use std::io::BufReader;
 
@@ -24,216 +23,29 @@ use flate2::write::GzEncoder;
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
 
-use std::f64::consts::E;
+use serde::{Deserialize, Serialize};
 
-/////////////////////////////////////////////////////////////////////////
-////////////   Import from other scripts here as needed.   //////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+////////////   Declare modules (contents are in the associated files)       //////////////
 mod lib_io; 
-use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, load_epitopes_distances_from_tar_gz, load_epitopes_kds_from_tar_gz}; 
-
 mod lib_rust_function_versions;
+mod lib_data_structures_auxiliary_functions;
+mod lib_math_functions;
+
+//////////////////////////////////////////////////////////////////////////////////////////
+////////////   Bind these function names to their full module paths         //////////////
+use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, 
+    load_epitopes_distances_from_tar_gz, load_epitopes_kds_from_tar_gz, 
+    set_json_path, evaluate_context}; 
 use lib_rust_function_versions::{compute_gamma_d_coeff_rs, 
     process_distance_info_vec_rs, process_kd_info_vec_rs, 
     compute_logKinv_and_entropy_dict_rs, compute_logCh_dict_rs};
+use lib_data_structures_auxiliary_functions::{DistanceMetricContext, DistanceMetricType, TargetEpiDistances, have_same_keys};
+use lib_math_functions::{calculate_auc_rs};
 /////////////////////////////////////////////////////////////////////////
-////////////////////////////z/////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 
 
-#[derive(Debug, serde::Deserialize)]
-struct JSONData {
-    // If fields may or may not appear in the json (e.g., epidist_blosum62_distance vs all_tcr_all_combos_model), use the Option<> type.
-    // The struct names must match those used in the json file.
-    d_i: Vec<f64>,
-    euclid_coords: Option<HashMap<char, [f64; 2]>>,
-    M_ab: HashMap<String, f64>,
-    blosum62_reg: Option<f64>,
-}
-
-struct EpitopeDistanceStruct {
-    amino_acid_dict: HashMap<char, usize>,
-    di: Vec<f64>,
-    mab: Vec<Vec<f64>>,
-}
-
-impl EpitopeDistanceStruct {
-    fn new(amino_acids: &str, di: Vec<f64>, mab: Vec<Vec<f64>>) -> Self {
-        let mut amino_acid_dict = HashMap::new();
-        for (i, aa) in amino_acids.chars().enumerate() {
-            amino_acid_dict.insert(aa, i);
-        }
-
-        EpitopeDistanceStruct {
-            amino_acid_dict,
-            di,
-            mab,
-        }
-    }
-
-    fn load_from_json(file_path: &str) -> Result<Self, Box<dyn Error>> {
-        let file = File::open(file_path)?;
-        let reader = BufReader::new(file);
-        let json_data: JSONData = serde_json::from_reader(reader)?;
-
-        let amino_acids = "ACDEFGHIKLMNPQRSTVWY";
-        let mut mab = vec![vec![0.0; amino_acids.len()]; amino_acids.len()];
-
-        for (i, aa_a) in amino_acids.chars().enumerate() {
-            for (j, aa_b) in amino_acids.chars().enumerate() {
-                let akey = format!("{}->{}", aa_a, aa_b);
-                let bkey = format!("{}->{}", aa_b, aa_a);
-                let val = *json_data.M_ab.get(&akey).unwrap_or_else(|| json_data.M_ab.get(&bkey).unwrap_or(&0.0));
-                mab[i][j] = val;
-            }
-        }
-
-        Ok(EpitopeDistanceStruct::new(
-            amino_acids,
-            json_data.d_i,
-            mab,
-        ))
-    }
-
-    fn load_hamming(epitope_length: usize) -> Result<Self, Box<dyn Error>> {
-        let amino_acids = "ACDEFGHIKLMNPQRSTVWY";
-        
-        let di = vec![1.0; epitope_length];
-
-        let mut mab = vec![vec![0.0; amino_acids.len()]; amino_acids.len()];
-        for (i, aa_a) in amino_acids.chars().enumerate() {
-            for (j, aa_b) in amino_acids.chars().enumerate() {
-                if i == j {
-                   let val = 0.0;
-                   mab[i][j] = val;
-                } else{
-                    let val = 1.0;
-                    mab[i][j] = val;
-                }
-
-                
-            }
-        }  
-        Ok(EpitopeDistanceStruct::new(
-            amino_acids,
-            di,
-            mab,
-        ))      
-    }
-
-    fn gamma_d_coeff<'a>(&'a self) -> Result<f64, Box<dyn Error>> {
-        let mut melems = Vec::new();
-        
-        for (i, row) in self.mab.iter().enumerate() {
-            let row2: Vec<_> = row.iter().enumerate()
-                .filter(|&(j, _)| j != i) // Exclude diagonal element
-                .map(|(_, &val)| val)
-                .collect();
-            melems.extend_from_slice(&row2);
-        }
-
-        let sum: f64 = melems.iter().sum();
-        let mean = sum / (melems.len() as f64);
-
-        if mean.is_nan() {
-            Err("Mean is NaN".into())
-        } else {
-            Ok(1.0 / mean)
-        }
-    }
-
-    fn epitope_dist<'a>(&'a self, epi_a: &'a str, epi_b: &'a str) -> Result<(f64, Vec<&'a str>), Box<dyn Error>> {
-        /*
-        We introduce a named lifetime parameter ('a) to tie the lifetimes of the input references and 
-        the references stored in the invalid_epitopes vector that is returned. 
-        This ensures that all references have compatible lifetimes and prevents any lifetime-related errors.
-        Rust ensures that references returned from a function cannot outlive the data they refer to, and we need to 
-        ensure that all references have compatible lifetimes to satisfy this constraint.
-        */
-        if epi_a.len() < 9 || epi_b.len() < 9 {
-            return Err("Epitope lengths must be at least 9 characters".into());
-        }
-    
-        let mut invalid_epitopes = Vec::new();
-        let mut min_distance = f64::INFINITY;
-    
-        for i in 0..=epi_a.len() - 9 {
-            for j in 0..=epi_b.len() - 9 {
-                let sub_epi_a = &epi_a[i..i+9];
-                let sub_epi_b = &epi_b[j..j+9];
-                let mut sum = 0.0;
-    
-                for (a, b) in sub_epi_a.chars().zip(sub_epi_b.chars()) {
-                    let idx_a = match self.amino_acid_dict.get(&a) {
-                        Some(idx) => *idx,
-                        None => {
-                            invalid_epitopes.push(sub_epi_a);
-                            break;
-                        }
-                    };
-    
-                    let idx_b = match self.amino_acid_dict.get(&b) {
-                        Some(idx) => *idx,
-                        None => {
-                            invalid_epitopes.push(sub_epi_b);
-                            break;
-                        }
-                    };
-    
-                    sum += self.mab[idx_a][idx_b] * self.di[i];
-                }
-    
-                if sum < min_distance {
-                    min_distance = sum;
-                }
-            }
-        }
-    
-        Ok((min_distance, invalid_epitopes))
-    }
-}        
-
-
-enum DistanceMetricType {
-    hamming,
-    epidist_blosum62_distance,
-    all_tcr_all_combos_model,
-}
-struct DistanceMetricContext {
-    metric: DistanceMetricType,
-    json_path: String,
-}
-
-fn set_json_path(data_matrix_dir: &str, dm_type: &DistanceMetricType) -> String {
-    match dm_type {
-        DistanceMetricType::all_tcr_all_combos_model => data_matrix_dir.to_owned()  + "all_tcr_all_combos_model.json",
-        DistanceMetricType::epidist_blosum62_distance => data_matrix_dir.to_owned()  + "epidist_blosum62_distance.json",
-        DistanceMetricType::hamming => "".to_string()
-    }
-}
-fn evaluate_context(c: DistanceMetricContext) -> Result<EpitopeDistanceStruct,Box<dyn Error>> {
-    match c.metric {
-        DistanceMetricType::all_tcr_all_combos_model => EpitopeDistanceStruct::load_from_json(&c.json_path),
-        DistanceMetricType::epidist_blosum62_distance => EpitopeDistanceStruct::load_from_json(&c.json_path),
-        DistanceMetricType::hamming => EpitopeDistanceStruct::load_hamming(9)
-    }
-}
-
-
-#[derive(Debug)]
-#[derive(Clone)]
-struct TargetEpiDistances {
-    epitope: String,
-    distance: f64,
-}
-
-struct TargetEpiKds {
-    epitope: String,
-    Kd: f64,
-}
-
-
-fn tuple_to_string(tuple: &(f64, f64)) -> String {
-    format!("{:?}", tuple)
-}
 
 // #######################################################################################
 #[pyfunction]
@@ -320,12 +132,7 @@ fn compute_distances_from_query_py(query_epi: &str,
     Ok((epi_dist_dict, end_time)) // Return HashMap instead of vector
 }
 
-// Helper function to check if two HashMaps have the same keys
-fn have_same_keys(map1: &HashMap<String, f64>, map2: &HashMap<String, f64>) -> bool {
-    let keys1: HashSet<_> = map1.keys().collect();
-    let keys2: HashSet<_> = map2.keys().collect();
-    keys1 == keys2
-}
+
 
 
 
@@ -600,12 +407,57 @@ fn compute_log_rho_multi_query_py(
     Ok((log_rho_multi_query_dict, end_time))
 }
 
-// }
+
+
+/*
+AUC section
+*/
+#[pyfunction]
+fn calculate_auc_dict(nb_records: Vec<(String, i32, (f64, f64), (f64, f64), f64)>) -> HashMap<String, HashMap<String, Vec<(f64, f64, f64)>>> {
+    /*
+    Returns auc_dict.
+    auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric] = [[FOREIGN_params_numeric[0], query_assay_auc]]
+        FOREIGN_params_numeric[1] is the gamma_logKd value for KInv_foreign 
+        SELF_params_numeric are the gamma_d,gamma_logKd values for KInv_self 
+        FOREIGN_params_numeric[0] is the gamma_d value for KInv_foreign
+     */
+
+    // Compute AUC values in parallel and collect them into a vector of tuples
+    let temp_auc_values: Vec<_> = nb_records
+        .par_iter()
+        .map(|(full_query_epi, immunogenicity, self_params_numeric, foreign_params_numeric, nb)| {
+            let pos_assay = if *immunogenicity == 1 { vec![*nb] } else { Vec::new() };
+            let neg_assay = if *immunogenicity == 0 { vec![*nb] } else { Vec::new() };
+
+            let auc_value = calculate_auc_rs(&pos_assay, &neg_assay).unwrap();
+
+            let foreign_key = format!("{:?}", foreign_params_numeric.0);
+            let self_key = format!("{:?}", self_params_numeric);
+
+            (foreign_key, self_key, foreign_params_numeric.0, auc_value, 0.0)
+        })
+        .collect();
+
+    // Populate auc_dict from temp_auc_values
+    let mut auc_dict = HashMap::new();
+    for (foreign_key, self_key, foreign_numeric, auc_value, _) in temp_auc_values {
+        auc_dict
+            .entry(foreign_key)
+            .or_insert_with(HashMap::new)
+            .entry(self_key)
+            .or_insert_with(Vec::new)
+            .push((foreign_numeric, auc_value, 0.0)); // koncz_auc set to 0 since there's only one assay
+    }
+
+    auc_dict
+}
+
 // A Python module implemented in Rust.
 #[pymodule]
 fn immunogenicity_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_distances_from_query_py, m)?)?;
     m.add_function(wrap_pyfunction!(compute_log_non_rho_terms_multi_query_single_hla_py, m)?)?;
     m.add_function(wrap_pyfunction!(compute_log_rho_multi_query_py, m)?)?;
+    m.add_function(wrap_pyfunction!(calculate_auc_dict, m)?)?;
     Ok(())
 }

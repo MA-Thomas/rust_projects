@@ -16,11 +16,29 @@ use tar::Archive;
 
 /////////////////////////////////////////////////////////////////
 ////////////   Use types defined in lib.rs   ////////////////////
-use crate::DistanceMetricType;
-use crate::TargetEpiDistances;
-use crate::TargetEpiKds;
+use crate::lib_data_structures_auxiliary_functions::DistanceMetricType;
+use crate::lib_data_structures_auxiliary_functions::TargetEpiDistances;
+use crate::lib_data_structures_auxiliary_functions::TargetEpiKds;
+use crate::lib_data_structures_auxiliary_functions::DistanceMetricContext;
+use crate::lib_data_structures_auxiliary_functions::EpitopeDistanceStruct;
 /////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////
+
+
+pub fn set_json_path(data_matrix_dir: &str, dm_type: &DistanceMetricType) -> String {
+    match dm_type {
+        DistanceMetricType::all_tcr_all_combos_model => data_matrix_dir.to_owned()  + "all_tcr_all_combos_model.json",
+        DistanceMetricType::epidist_blosum62_distance => data_matrix_dir.to_owned()  + "epidist_blosum62_distance.json",
+        DistanceMetricType::hamming => "".to_string()
+    }
+}
+pub fn evaluate_context(c: DistanceMetricContext) -> Result<EpitopeDistanceStruct,Box<dyn Error>> {
+    match c.metric {
+        DistanceMetricType::all_tcr_all_combos_model => EpitopeDistanceStruct::load_from_json(&c.json_path),
+        DistanceMetricType::epidist_blosum62_distance => EpitopeDistanceStruct::load_from_json(&c.json_path),
+        DistanceMetricType::hamming => EpitopeDistanceStruct::load_hamming(9)
+    }
+}
 
 pub fn parse_fasta(file_path: &str, max_target_num: usize, buffer_capacity: Option<usize>) -> Result<Vec<String>, Box<dyn Error>> {
     let file = File::open(file_path)?;
@@ -203,3 +221,5 @@ pub fn load_epitopes_kds_from_tar_gz(csv_kds_file_path: &str) -> Result<Vec<Targ
     }
     Ok(target_epi_kds)
 }
+
+
