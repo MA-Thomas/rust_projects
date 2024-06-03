@@ -26,6 +26,8 @@ pub fn calculate_auc_rs(pos: &[f64], neg: &[f64]) -> Result<f64, CalculationErro
 
     Ok(auc)
 }
+
+
 impl From<CalculationError> for pyo3::PyErr {
     fn from(error: CalculationError) -> Self {
         // Convert CalculationError to PyErr here
