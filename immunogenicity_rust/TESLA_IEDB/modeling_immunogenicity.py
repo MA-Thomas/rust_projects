@@ -64,10 +64,10 @@ if __name__ == "__main__":
     
     parser.add_argument("-load_target_hla_epi_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
 
-    parser.add_argument("-allele", default='A2301')
+    parser.add_argument("-allele", default='A0301')
 
     parser.add_argument("-inclusive_start_ind", default="0")
-    parser.add_argument("-inclusive_end_ind", default="0")
+    parser.add_argument("-inclusive_end_ind", default="2000")
     args = parser.parse_args()
 
 
@@ -190,29 +190,24 @@ if __name__ == "__main__":
         compute_logKinv_and_entropy = True
 
         # # PARAMETER SETS FOR ZACH'S METRIC
-        # gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 12),10)) + list(np.round(create_log_spaced_list(2e-4, 1, 3),4)) )))
-        # gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  )))
-
-        # gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 12),10)) + list(np.round(create_log_spaced_list(1, 5, 15),4)) + [1e-8, 1e-100])))
-        # gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  +[1e-8, 1e-100])))
-
-
         gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(2e-4, 1, 7),4)) )))
-        gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  )))
+        gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 12),4))  )))
 
-        gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 10),10)) + list(np.round(create_log_spaced_list(1, 5, 8),4)) + [1e-8, 1e-100])))
-        gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  +[1e-7, 1e-8, 1e-100])))
+        gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(1e-1, 5, 6),4)) + [1e-8, 1e-100])))
+        gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 10),4))  +[1e-8, 1e-100])))
         #################################################################################################
         #################################################################################################
         ##                                 Self settings.
-        compute_logCh = True
-        d_PS_threshold = 70.0 # # distances above this threshold do not contirbute to Kinv_self (models positive selection)
-        d_NS_cutoff = 3.14 # # distances below this cutoff do not contribute to Kinv_self (partially models negative selection)
+        
+        d_ub = 70.0 # # distances above this threshold do not contirbute to Kinv_self (models positive selection)
+        d_lb = 3.14 # # distances below this cutoff do not contribute to Kinv_self (partially models negative selection)
         #################################################################################################
         #################################################################################################
 
         target_epitopes_at_allele = ['all']
-        logKInv_entropy_self_dict, logCh_dict, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        compute_logCh = True
+        calc_second_hm_without_dist_restriction = True #logKInv_self and entropy for rho(e,h)
+        logKInv_entropy_self_dict, logKInv_entropy_self_for_rho_dict, logCh_dict, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_S_dists_file,load_precomputed_distances,self_fasta_path)],csv_S_kds_file,
             distance_metric, 
@@ -220,11 +215,13 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_self_values,
             gamma_logkd_self_values,
-            d_PS_threshold, d_NS_cutoff,
+            d_ub, d_lb,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
+
         print("len(logKInv_entropy_self_dict): ",len(logKInv_entropy_self_dict))
         print("A few items from logKInv_entropy_self_dict: ")
         for key, value in itertools.islice(logKInv_entropy_self_dict.items(), 3):
@@ -240,8 +237,9 @@ if __name__ == "__main__":
         #################################################################################################
         ##                                 Foreign settings.
         compute_logCh = False
-        d_PS_threshold_foreign = 1e10 # # not relevant for K_inv evaluated on foreign target set
-        d_NS_cutoff_foreign = 0 # # not relevant for K_inv evaluated on foreign target set
+        calc_second_hm_without_dist_restriction = False
+        d_ub_foreign = 1e10 # # not relevant for K_inv evaluated on foreign target set
+        d_lb_foreign = 0 # # not relevant for K_inv evaluated on foreign target set
 
         '''
         When the target set is the self-epitope set, all self epitopes are used to compute KInv.
@@ -258,7 +256,7 @@ if __name__ == "__main__":
             target_epitopes_at_allele = target_hla_epi_dict['koncz_imm'][allele]
         else:
             target_epitopes_at_allele = []
-        logKInv_entropy_Koncz_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        logKInv_entropy_Koncz_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_KImm_dists_file,load_precomputed_distances,immunogenic_Koncz_fasta_path)], csv_KImm_kds_file,
             distance_metric, 
@@ -266,10 +264,11 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_nonself_values,
             gamma_logkd_nonself_values,
-            d_PS_threshold_foreign, d_NS_cutoff_foreign,
+            d_ub_foreign, d_lb_foreign,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
         print("len(logKInv_entropy_Koncz_imm_epi_dict): ",len(logKInv_entropy_Koncz_imm_epi_dict))
         print("A few items from logKInv_entropy_Koncz_imm_epi_dict: ")
@@ -281,7 +280,7 @@ if __name__ == "__main__":
             target_epitopes_at_allele = target_hla_epi_dict['koncz_nonimm'][allele]
         else:
             target_epitopes_at_allele = [] 
-        logKInv_entropy_Koncz_non_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        logKInv_entropy_Koncz_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_KNImm_dists_file,load_precomputed_distances,nonimmunogenic_Koncz_fasta_path)], csv_KNImm_kds_file,
             distance_metric, 
@@ -289,10 +288,11 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_nonself_values,
             gamma_logkd_nonself_values,
-            d_PS_threshold_foreign, d_NS_cutoff_foreign,
+            d_ub_foreign, d_lb_foreign,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
         print("[python] Koncz_non_imm runtime: ",runtime)
 
@@ -300,7 +300,7 @@ if __name__ == "__main__":
             target_epitopes_at_allele = target_hla_epi_dict['ours_imm'][allele]
         else:
             target_epitopes_at_allele = [] 
-        logKInv_entropy_Ours_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        logKInv_entropy_Ours_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_OImm_dists_file,load_precomputed_distances,immunogenic_Ours_fasta_path)], csv_OImm_kds_file,
             distance_metric, 
@@ -308,10 +308,11 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_nonself_values,
             gamma_logkd_nonself_values,
-            d_PS_threshold_foreign, d_NS_cutoff_foreign,
+            d_ub_foreign, d_lb_foreign,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
         print("[python] Ours_imm runtime: ",runtime)
 
@@ -319,7 +320,7 @@ if __name__ == "__main__":
             target_epitopes_at_allele = target_hla_epi_dict['ours_nonimm'][allele]
         else:
             target_epitopes_at_allele = []
-        logKInv_entropy_Ours_non_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        logKInv_entropy_Ours_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_ONImm_dists_file,load_precomputed_distances,nonimmunogenic_Ours_fasta_path)], csv_ONImm_kds_file,
             distance_metric, 
@@ -327,10 +328,11 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_nonself_values,
             gamma_logkd_nonself_values,
-            d_PS_threshold_foreign, d_NS_cutoff_foreign,
+            d_ub_foreign, d_lb_foreign,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
         print("[python] Ours_non_imm runtime: ",runtime)
 
@@ -338,7 +340,7 @@ if __name__ == "__main__":
             target_epitopes_at_allele = target_hla_epi_dict['tesla_imm'][allele]
         else:
             target_epitopes_at_allele = []
-        logKInv_entropy_Tesla_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        logKInv_entropy_Tesla_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_TImm_dists_file,load_precomputed_distances,immunogenic_Tesla_fasta_path)], csv_TImm_kds_file,
             distance_metric, 
@@ -346,10 +348,11 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_nonself_values,
             gamma_logkd_nonself_values,
-            d_PS_threshold_foreign, d_NS_cutoff_foreign,
+            d_ub_foreign, d_lb_foreign,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
         print("[python] Tesla_imm runtime: ",runtime)
 
@@ -357,7 +360,7 @@ if __name__ == "__main__":
             target_epitopes_at_allele = target_hla_epi_dict['tesla_nonimm'][allele]
         else:
             target_epitopes_at_allele = []
-        logKInv_entropy_Tesla_non_imm_epi_dict, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+        logKInv_entropy_Tesla_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_TNImm_dists_file,load_precomputed_distances,nonimmunogenic_Tesla_fasta_path)], csv_TNImm_kds_file,
             distance_metric, 
@@ -365,19 +368,23 @@ if __name__ == "__main__":
             max_target_num,
             gamma_d_nonself_values,
             gamma_logkd_nonself_values,
-            d_PS_threshold_foreign, d_NS_cutoff_foreign,
+            d_ub_foreign, d_lb_foreign,
             compute_logKinv_and_entropy,
             compute_logCh,
             target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
         )
         print("[python] Tesla_non_imm runtime: ",runtime)
+
+
+        ##  ---------------------------------------------
         ##  --------------  COMPUTE rho  ----------------
         use_Ours_contribution = True 
         use_Koncz_contribution = True
         use_Tesla_contribution = True 
 
         log_rho_dict, runtime = immunogenicity_rust.compute_log_rho_multi_query_py(
-            logKInv_entropy_self_dict, 
+            logKInv_entropy_self_for_rho_dict, 
             logKInv_entropy_Ours_imm_epi_dict,
             logKInv_entropy_Ours_non_imm_epi_dict, 
             use_Ours_contribution,
@@ -409,16 +416,16 @@ if __name__ == "__main__":
                    logKInv_entropy_Ours_imm_epi_dict, logKInv_entropy_Ours_non_imm_epi_dict,
                    log_rho_dict]
         
-        args.save_pkl_dir = args.save_pkl_dir + '/d_PS_threshold_'+str(d_PS_threshold)+'_d_NS_cutoff_'+str(d_NS_cutoff)+'/'+allele
-        if not os.path.exists(args.save_pkl_dir):
-            os.makedirs(args.save_pkl_dir)
+        save_pkl_dir = args.save_pkl_dir + '/d_ub_'+str(d_ub)+'_d_lb_'+str(d_lb)+'/'+allele
+        if not os.path.exists(save_pkl_dir):
+            os.makedirs(save_pkl_dir)
 
         strg = 'immunogenicity_outputs_'+distance_metric+'_'+str(idx)+'_'
         for elem in query_epi_list:
             strg += elem + '_'
         strg += hla 
         strg += '.pkl'
-        with open(os.path.join(args.save_pkl_dir,strg), 'wb') as pk:
+        with open(os.path.join(save_pkl_dir,strg), 'wb') as pk:
             pickle.dump(outputs, pk)
 
     print("[python] script runtime: ", time.time()-start_time)

@@ -242,10 +242,9 @@ pub fn compute_logKinv_and_entropy_dict_rs(
     gamma_d_values: &[f64],
     gamma_logkd_values: &[f64],
     gamma_d_coeff: f64,
-    d_PS_threshold: f64,
-    d_NS_cutoff: f64,
-    use_counts_concs: bool,
-    target_epis_at_hla: &Vec<&str>) -> HashMap<String, Option<(f64, f64)>> {
+    d_ub: f64,
+    d_lb: f64,
+    use_counts_concs: bool) -> HashMap<String, Option<(f64, f64)>> {
 
     const KD_THRESHOLD: f64 = 1e-10;
 
@@ -275,8 +274,8 @@ pub fn compute_logKinv_and_entropy_dict_rs(
         kd_safe.ln()
     });
 
-    // Masking based on PS and NS thresholds on distances
-    let mask = &epi_dist_array.map(|&x| x < d_PS_threshold) & epi_dist_array.map(|&x| x > d_NS_cutoff);
+    // Masking based on PS (d_ub) and NS (d_lb)
+    let mask = &epi_dist_array.map(|&x| x <= d_ub) & epi_dist_array.map(|&x| x >= d_lb);
 
     // Ensure mask is of the same length as the arrays
     assert_eq!(mask.len(), epi_dist_array.len());

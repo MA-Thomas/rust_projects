@@ -165,10 +165,11 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     max_target_num: usize,
     gamma_d_values: Vec<f64>,
     gamma_logkd_values: Vec<f64>,
-    d_PS_threshold: f64,
-    d_NS_cutoff: f64,
+    d_ub: f64,
+    d_lb: f64,
     compute_logKinv_and_entropy: bool, compute_logCh: bool,
-    target_epis_at_hla: Vec<&str> ) -> PyResult<(HashMap<String, HashMap<String, Option<(f64, f64)>>>, HashMap<String, Option<f64>>, u64)> {
+    target_epis_at_hla: Vec<&str>,
+    calc_second_hm_without_dist_restriction: bool) -> PyResult<(HashMap<String, HashMap<String, Option<(f64, f64)>>>, HashMap<String, HashMap<String, Option<(f64, f64)>>>, HashMap<String, Option<f64>>, u64)> {
 
     let start_time = std::time::Instant::now();
 
@@ -195,6 +196,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     }
 
     let mut logKinv_entropy_multi_query_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>> = HashMap::new();
+    let mut logKinv_entropy_multi_query_no_dist_restriction_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>> = HashMap::new();
 
     // Compute gamma_d_coeff
     let gamma_d_coeff_result = compute_gamma_d_coeff_rs(dist_metric, data_matrix_dir);
@@ -259,6 +261,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
 
         //////////    MODEL COMPUTATIONS    /////////
         let mut logKinv_entropy_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
+        let mut logKinv_entropy_no_dist_restriction_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
 
         if compute_logKinv_and_entropy {
             // Check if the length of target_epis_at_hla is 0 (no target epitopes at the current hla)
@@ -275,15 +278,34 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
                     &gamma_d_values,
                     &gamma_logkd_values,
                     gamma_d_coeff,
-                    d_PS_threshold,
-                    d_NS_cutoff,
+                    d_ub,
+                    d_lb,
                     use_counts_concs,
-                    &target_epis_at_hla,
                 );
+
+                if calc_second_hm_without_dist_restriction {
+                    logKinv_entropy_no_dist_restriction_dict = compute_logKinv_and_entropy_dict_rs(
+                        &epi_dist_dict,
+                        &epi_kd_dict,
+                        &epi_log_count_dict,
+                        &epi_log_conc_dict,
+                        &gamma_d_values,
+                        &gamma_logkd_values,
+                        gamma_d_coeff,
+                        1000000000.0,
+                        0.0,
+                        use_counts_concs,
+                    );                    
+                }
             }
         }
         
-        logKinv_entropy_multi_query_dict.insert(query_epi.to_string(), logKinv_entropy_dict);
+        if compute_logKinv_and_entropy {
+            logKinv_entropy_multi_query_dict.insert(query_epi.to_string(), logKinv_entropy_dict);
+            if calc_second_hm_without_dist_restriction {
+                logKinv_entropy_multi_query_no_dist_restriction_dict.insert(query_epi.to_string(), logKinv_entropy_no_dist_restriction_dict);
+            }
+        }
     }
 
     let mut logCh_dict: HashMap<String, Option<f64>> = HashMap::new();
@@ -302,7 +324,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     }
 
     let end_time = start_time.elapsed().as_secs_f64() as u64;
-    Ok((logKinv_entropy_multi_query_dict, logCh_dict, end_time)) 
+    Ok((logKinv_entropy_multi_query_dict, logKinv_entropy_multi_query_no_dist_restriction_dict, logCh_dict, end_time)) 
   
 }
 
