@@ -7,7 +7,7 @@ from sklearn import metrics
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import immunogenicity_rust 
+# import immunogenicity_rust 
 
 def full_pep_from_ninemers(epi_list):
     if not epi_list:
@@ -35,27 +35,35 @@ def load_data(file_path):
     with open(file_path, 'rb') as file:
         return pickle.load(file)
 
-def load_and_preprocess_data(args):
-    # Batched loading
-    tesla_files = [os.path.join(args.tesla_variables_dir, f'TESLA_variables_{args.distance_metric_type}.pkl')]
-    iedb_files = [os.path.join(args.iedb_variables_dir, f'Koncz_IEDB_variables_{args.distance_metric_type}.pkl')]
-    
-    # Load and preprocess data in batches
-    tesla_data_batches = [load_data(file) for file in tesla_files]
-    iedb_data_batches = [load_data(file) for file in iedb_files]
+def load_and_preprocess_data_generator(args, file_objects):
+    # Initialize n for each file object
+    n_list = [0] * len(file_objects)
 
-    # Combine and preprocess batches
-    combined_tesla_data = pd.concat([batch[0] for batch in tesla_data_batches])
-    combined_iedb_data = pd.concat([batch[0] for batch in iedb_data_batches])
+    while True:
+        # Initialize a list to collect the n-th rows from all files
+        rows = []
 
-    combined_tesla_data['assay'] = 'TESLA'
-    combined_iedb_data['assay'] = 'IEDB'
+        # Iterate over each file object and get its n-th row
+        for i, file_obj in enumerate(file_objects):
+            # Seek to the position corresponding to the current row
+            file_obj.seek(0)
+            for _ in range(n_list[i]):
+                pickle.load(file_obj)
+            
+            # Load the next row from the file
+            try:
+                row = pickle.load(file_obj)
+                rows.append(row)  # Assuming each file contains a list of rows
+                n_list[i] += 1  # Increment n for the next iteration
+            except EOFError:
+                # If EOF is reached, set row to None
+                row = None
 
-    combined_data = pd.concat([combined_tesla_data, combined_iedb_data]).sort_values(by='peptides')
-    hla_df = combined_data[combined_data['allele'] == args.allele]
+        if all(row is None for row in rows):
+            break
 
-    return hla_df
-
+        yield rows
+        
 def process_row(idx, row, args, start_time):
     nb_records = []
     # print("intermediate time 1: ", time.time() - start_time)
@@ -79,6 +87,7 @@ def process_row(idx, row, args, start_time):
                 nb_records.append((full_query_epi, row['assay'], row['immunogenicity'], SELF_params_numeric, FOREIGN_params_numeric, nb))
     return nb_records
 
+
 def calculate_auc(pos, neg):
     y = np.array([2] * len(pos) + [1] * len(neg))
     pred = np.concatenate([pos, neg])
@@ -99,13 +108,19 @@ if __name__ == "__main__":
     parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
     parser.add_argument("-allele", default='A0301')
-    parser.add_argument("-max_workers", type=int, default=12, help="Maximum number of worker threads")
+    parser.add_argument("-max_workers", type=int, default=8, help="Maximum number of worker threads")
     args = parser.parse_args()
 
     start_time = time.time()
-    hla_df = load_and_preprocess_data(args)
+    # Open all files and get file objects
+    tesla_file_objects = [open(os.path.join(args.tesla_variables_dir, f'TESLA_variables_{args.distance_metric_type}.pkl'), 'rb')]
+    iedb_file_objects = [open(os.path.join(args.iedb_variables_dir, f'Koncz_IEDB_variables_{args.distance_metric_type}.pkl'), 'rb')]
     
-    # hla_df = hla_df[:40]
+    # Pass the file objects to the generator along with other arguments
+    generator = load_and_preprocess_data_generator(args, tesla_file_objects + iedb_file_objects)
+
+    assert(1==2)
+    hla_df = list(hla_df_generator)[:2]
     
     nb_tesla_records = []
     nb_iedb_records = [] 
@@ -126,11 +141,12 @@ if __name__ == "__main__":
 
     print("loading runtime:", time.time() - start_time)
     
+
 #%%  COMPUTE AUCs IN RUST
     start_time2 = time.time()
     tesla_auc_dict = immunogenicity_rust.calculate_auc_dict(nb_tesla_records)
     iedb_auc_dict = immunogenicity_rust.calculate_auc_dict(nb_iedb_records)
-    print("rust auc_dict runtime:", time.time() - start_time2)
+    print("rust auc_dict runtime:", time.time() - start_time)
     assert(1==2)
 #%%
 
@@ -171,4 +187,6 @@ if __name__ == "__main__":
     keys_ranking_list.sort(key=lambda x: x[2], reverse=True)
     print("key_list runtime:", time.time() - start_time3)
 #%%
+
+# -*- coding: utf-8 -*-
 

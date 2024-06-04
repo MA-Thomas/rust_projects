@@ -244,7 +244,8 @@ pub fn compute_logKinv_and_entropy_dict_rs(
     gamma_d_coeff: f64,
     d_PS_threshold: f64,
     d_NS_cutoff: f64,
-    use_counts_concs: bool) -> HashMap<String, Option<(f64, f64)>> {
+    use_counts_concs: bool,
+    target_epis_at_hla: &Vec<&str>) -> HashMap<String, Option<(f64, f64)>> {
 
     const KD_THRESHOLD: f64 = 1e-10;
 

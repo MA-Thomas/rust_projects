@@ -41,7 +41,7 @@ use lib_rust_function_versions::{compute_gamma_d_coeff_rs,
     process_distance_info_vec_rs, process_kd_info_vec_rs, 
     compute_logKinv_and_entropy_dict_rs, compute_logCh_dict_rs};
 use lib_data_structures_auxiliary_functions::{DistanceMetricContext, DistanceMetricType, TargetEpiDistances, have_same_keys};
-use lib_math_functions::{calculate_auc_rs};
+use lib_math_functions::{CalculationError, calculate_auc_rs};
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
@@ -135,6 +135,26 @@ fn compute_distances_from_query_py(query_epi: &str,
 
 
 
+fn print_keys_diff<K, V>(map1: &HashMap<K, V>, map2: &HashMap<K, V>)
+where
+    K: std::hash::Hash + Eq + std::fmt::Debug,
+{
+    let keys1: HashSet<_> = map1.keys().collect();
+    let keys2: HashSet<_> = map2.keys().collect();
+
+    let only_in_map1: HashSet<_> = keys1.difference(&keys2).collect();
+    let only_in_map2: HashSet<_> = keys2.difference(&keys1).collect();
+
+    println!("Keys found only in map1 ({}):", only_in_map1.len());
+    // for key in &only_in_map1 {
+    //     println!("{:?}", key);
+    // }
+
+    println!("Keys found only in map2 ({}):", only_in_map2.len());
+    // for key in &only_in_map2 {
+    //     println!("{:?}", key);
+    // }
+}
 
 #[pyfunction]
 pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&str>, 
@@ -147,13 +167,14 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     gamma_logkd_values: Vec<f64>,
     d_PS_threshold: f64,
     d_NS_cutoff: f64,
-    compute_logKinv_and_entropy: bool, compute_logCh: bool) -> PyResult<(HashMap<String, HashMap<String, Option<(f64, f64)>>>, HashMap<String, Option<f64>>, u64)> {
+    compute_logKinv_and_entropy: bool, compute_logCh: bool,
+    target_epis_at_hla: Vec<&str> ) -> PyResult<(HashMap<String, HashMap<String, Option<(f64, f64)>>>, HashMap<String, Option<f64>>, u64)> {
 
     let start_time = std::time::Instant::now();
 
     //////////    PREPROCESSING    /////////
-    // Load Kds from Query into HashMap
-    let epi_kd_dict = match process_kd_info_vec_rs(&kd_file_path) {
+    // Load Kds from Target Set into HashMap
+    let mut epi_kd_dict = match process_kd_info_vec_rs(&kd_file_path) {
         Ok(epi_kd_dict) => {
             println!("[rust] Kds processing succeeded.");
             println!("[rust] Length of epi_kd_dict: {}", epi_kd_dict.len());
@@ -161,6 +182,17 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
         },
         Err(err) => return Err(pyo3::exceptions::PyValueError::new_err(format!("Error processing Kds: {}", err))),
     };
+    /* 
+    Remove elements that do not appear in target_epis_at_hla. This is because for target sets 
+    other that the self-epitope set, the target should be hla dependent. We therefore need 
+    to remove from the default target set all epitopes that do not appear with the current
+    hla in the experimental data.
+    */ 
+    // Check if target_epis_at_hla contains a single element "all" (meaning the target set is the self-epitope set)
+    if !(target_epis_at_hla.len() == 1 && target_epis_at_hla[0] == "all") {
+        // Remove elements that do not appear in target_epis_at_hla
+        epi_kd_dict.retain(|k, _| target_epis_at_hla.contains(&k.as_str()));
+    }
 
     let mut logKinv_entropy_multi_query_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>> = HashMap::new();
 
@@ -205,7 +237,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
     for query_epi in query_epi_list {
 
         // Load or Generate Distances from Query into HashMap
-        let epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
+        let mut epi_dist_dict = match process_distance_info_vec_rs(&dist_file_info, query_epi, dist_metric, data_matrix_dir, max_target_num) {
             Ok(epi_dist_dict) => {
                 println!("[rust] Distance processing succeeded.");
                 println!("[rust] Length of epi_dist_dict: {}", epi_dist_dict.len());
@@ -213,9 +245,15 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
             },
             Err(err) => return Err(pyo3::exceptions::PyValueError::new_err(format!("Error processing distances: {}", err))),
         };
+        // Only retain epitopes from the target_epis_at_hla list.
+        if !(target_epis_at_hla.len() == 1 && target_epis_at_hla[0] == "all") {
+            // Remove elements that do not appear in target_epis_at_hla
+            epi_dist_dict.retain(|k, _| target_epis_at_hla.contains(&k.as_str()));
+        }
 
         // Check if both HashMaps have the same keys
         if !have_same_keys(&epi_dist_dict, &epi_kd_dict) {
+            print_keys_diff(&epi_dist_dict, &epi_kd_dict);
             return Err(pyo3::exceptions::PyValueError::new_err("The keys of epi_dist_dict and epi_kd_dict do not match."));
         }
 
@@ -223,19 +261,26 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_py(query_epi_list: Vec<&
         let mut logKinv_entropy_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
 
         if compute_logKinv_and_entropy {
-
-            logKinv_entropy_dict = compute_logKinv_and_entropy_dict_rs(
-                &epi_dist_dict,
-                &epi_kd_dict,
-                &epi_log_count_dict,
-                &epi_log_conc_dict,
-                &gamma_d_values,
-                &gamma_logkd_values,
-                gamma_d_coeff,
-                d_PS_threshold,
-                d_NS_cutoff,
-                use_counts_concs,
-            );
+            // Check if the length of target_epis_at_hla is 0 (no target epitopes at the current hla)
+            if target_epis_at_hla.is_empty() {
+                // Set 'no_target' to None
+                logKinv_entropy_dict.insert("no_target".to_string(), None);
+            } else {
+                // Call a function to compute the logKinv and entropy values, which updates the dictionary
+                logKinv_entropy_dict = compute_logKinv_and_entropy_dict_rs(
+                    &epi_dist_dict,
+                    &epi_kd_dict,
+                    &epi_log_count_dict,
+                    &epi_log_conc_dict,
+                    &gamma_d_values,
+                    &gamma_logkd_values,
+                    gamma_d_coeff,
+                    d_PS_threshold,
+                    d_NS_cutoff,
+                    use_counts_concs,
+                    &target_epis_at_hla,
+                );
+            }
         }
         
         logKinv_entropy_multi_query_dict.insert(query_epi.to_string(), logKinv_entropy_dict);
@@ -270,7 +315,10 @@ fn compute_log_rho_multi_query_py(
     use_Ours_contribution: bool,
     logKInv_entropy_Koncz_imm_epi_dict: &PyDict,
     logKInv_entropy_Koncz_non_imm_epi_dict: &PyDict,
-    use_Koncz_contribution: bool) -> PyResult<(HashMap<String, HashMap<String, HashMap<String, Option<f64>> > >, u64)> {
+    use_Koncz_contribution: bool,
+    logKInv_entropy_Tesla_imm_epi_dict: &PyDict,
+    logKInv_entropy_Tesla_non_imm_epi_dict: &PyDict, 
+    use_Tesla_contribution: bool) -> PyResult<(HashMap<String, HashMap<String, HashMap<String, Option<f64>> > >, u64)> {
 
     // Auxiliary function to convert PyDict to HashMap<String, Option<(f64, f64)>>
     fn convert_nested_PyDict_to_HashMap(dict: &PyDict) -> PyResult<HashMap<String, HashMap<String, Option<(f64, f64)>>>> {
@@ -307,6 +355,9 @@ fn compute_log_rho_multi_query_py(
     let query_dict_logKInv_entropy_Ours_non_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Ours_non_imm_epi_dict)?;
     let query_dict_logKInv_entropy_Koncz_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Koncz_imm_epi_dict)?;
     let query_dict_logKInv_entropy_Koncz_non_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Koncz_non_imm_epi_dict)?;
+    
+    let query_dict_logKInv_entropy_Tesla_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Tesla_imm_epi_dict)?;
+    let query_dict_logKInv_entropy_Tesla_non_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Tesla_non_imm_epi_dict)?;
 
     for query_epi in query_dict_logKInv_entropy_self.keys() { 
 
@@ -330,20 +381,29 @@ fn compute_log_rho_multi_query_py(
             Some(values) => values,
             None => panic!("logKInv_entropy_Koncz_non_imm Key '{}' not found", query_epi),
         };
-
+        let logKInv_entropy_Tesla_imm = match query_dict_logKInv_entropy_Tesla_imm.get(query_epi) {
+            Some(values) => values,
+            None => panic!("logKInv_entropy_Tesla_imm Key '{}' not found", query_epi),
+        };
+        let logKInv_entropy_Tesla_non_imm = match query_dict_logKInv_entropy_Tesla_non_imm.get(query_epi) {
+            Some(values) => values,
+            None => panic!("logKInv_entropy_Tesla_non_imm Key '{}' not found", query_epi),
+        };
 
         // For the current query_epi: log_rho_dict[self_params][foreign_params] = rho_value
         let mut log_rho_dict: HashMap<String, HashMap<String, Option<f64>> > = HashMap::new();
         let mut self_term = 0.0;
         let mut iedb_imm_term = 0.0;
         let mut iedb_non_imm_term = 0.0;
+        let mut tesla_non_imm_term = 0.0;
+        let mut tesla_imm_term = 0.0;
         let mut log_rho = 0.0;
 
         // Iterate over self dict and populate log_rho_dict.
         for (self_key, self_value) in logKInv_entropy_self {
             
             self_term = 0.0;
-
+            
             // Extracting log_K_inv and entropy for self dict.
             let (log_K_inv_self, entropy_self) = match self_value {
                 Some((log_K_inv, entropy)) => (*log_K_inv, *entropy),
@@ -352,44 +412,89 @@ fn compute_log_rho_multi_query_py(
             self_term += (log_K_inv_self - entropy_self).exp();
 
             
+            let mut all_keys_set: HashSet<&String> = HashSet::new();
+            all_keys_set.extend(logKInv_entropy_Ours_imm.keys());
+            all_keys_set.extend(logKInv_entropy_Ours_non_imm.keys());
+            all_keys_set.extend(logKInv_entropy_Koncz_imm.keys());
+            all_keys_set.extend(logKInv_entropy_Koncz_non_imm.keys());
+
             // Iterate over foreign dicts and extract log_K_inv and entropy for each.
-            for (foreign_key, foreign_value) in logKInv_entropy_Ours_imm {
+            for foreign_key in all_keys_set {
                 
                 iedb_imm_term = 0.0;
                 iedb_non_imm_term = 0.0;
-                
-                if use_Ours_contribution {
-                    let (log_K_inv_Ours_imm, entropy_Ours_imm) = match foreign_value {
-                        Some((log_K_inv, entropy)) => (*log_K_inv, *entropy),
-                        None => continue, // Skip if self_value is None
-                    };
-                    iedb_imm_term += (log_K_inv_Ours_imm - entropy_Ours_imm).exp();
+                tesla_imm_term = 0.0;
+                tesla_non_imm_term = 0.0;
 
-                    let foreign_value = logKInv_entropy_Ours_non_imm.get(foreign_key);
-                    let (log_K_inv_Ours_non_imm, entropy_Ours_non_imm) = match foreign_value {
-                        Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                        _ => continue, // Skip if self_value is None
-                    };
-                    iedb_non_imm_term += (log_K_inv_Ours_non_imm - entropy_Ours_non_imm).exp();
+                if use_Ours_contribution {
+
+                    let target_epitopes_available = logKInv_entropy_Ours_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                    if target_epitopes_available {
+                        let foreign_value = logKInv_entropy_Ours_imm.get(foreign_key);
+                        let (log_K_inv_Ours_imm, entropy_Ours_imm) = match foreign_value {
+                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                            _ => continue, // Skip if self_value is None
+                        };
+                        iedb_imm_term += (log_K_inv_Ours_imm - entropy_Ours_imm).exp();
+                    }
+
+                    let target_epitopes_available = logKInv_entropy_Ours_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                    if target_epitopes_available {
+                        let foreign_value = logKInv_entropy_Ours_non_imm.get(foreign_key);
+                        let (log_K_inv_Ours_non_imm, entropy_Ours_non_imm) = match foreign_value {
+                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                            _ => continue, // Skip if self_value is None
+                        };
+                        iedb_non_imm_term += (log_K_inv_Ours_non_imm - entropy_Ours_non_imm).exp();
+                    }
                 } 
 
                 if use_Koncz_contribution {
-                    let foreign_value = logKInv_entropy_Koncz_imm.get(foreign_key);
-                    let (log_K_inv_Koncz_imm, entropy_Koncz_imm) = match foreign_value {
-                        Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                        _ => continue, // Skip if foreign_value is None or inner value is None
-                    };
-                    iedb_imm_term += (log_K_inv_Koncz_imm - entropy_Koncz_imm).exp();
 
-                    let foreign_value = logKInv_entropy_Koncz_non_imm.get(foreign_key);
-                    let (log_K_inv_Koncz_non_imm, entropy_Koncz_non_imm) = match foreign_value {
-                        Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                        _ => continue, // Skip if self_value is None
-                    };
-                    iedb_non_imm_term += (log_K_inv_Koncz_non_imm - entropy_Koncz_non_imm).exp();
+                    let target_epitopes_available = logKInv_entropy_Koncz_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                    if target_epitopes_available {
+                        let foreign_value = logKInv_entropy_Koncz_imm.get(foreign_key);
+                        let (log_K_inv_Koncz_imm, entropy_Koncz_imm) = match foreign_value {
+                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                            _ => continue, // Skip if foreign_value is None or inner value is None
+                        };
+                        iedb_imm_term += (log_K_inv_Koncz_imm - entropy_Koncz_imm).exp();
+                    }
+
+                    let target_epitopes_available = logKInv_entropy_Koncz_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                    if target_epitopes_available {
+                        let foreign_value = logKInv_entropy_Koncz_non_imm.get(foreign_key);
+                        let (log_K_inv_Koncz_non_imm, entropy_Koncz_non_imm) = match foreign_value {
+                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                            _ => continue, // Skip if self_value is None
+                        };
+                        iedb_non_imm_term += (log_K_inv_Koncz_non_imm - entropy_Koncz_non_imm).exp();
+                    }
                 }
 
-                log_rho = -self_term + iedb_imm_term - iedb_non_imm_term;
+                if use_Tesla_contribution {
+                    
+                    let target_epitopes_available = logKInv_entropy_Tesla_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                    if target_epitopes_available {
+                        let foreign_value = logKInv_entropy_Tesla_imm.get(foreign_key);
+                        let (log_K_inv_Tesla_imm, entropy_Tesla_imm) = match foreign_value {
+                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                            _ => continue, // Skip if foreign_value is None or inner value is None
+                        };
+                        tesla_imm_term += (log_K_inv_Tesla_imm - entropy_Tesla_imm).exp();
+                    }
+
+                    let target_epitopes_available = logKInv_entropy_Tesla_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                    if target_epitopes_available {
+                        let foreign_value = logKInv_entropy_Tesla_non_imm.get(foreign_key);
+                        let (log_K_inv_Tesla_non_imm, entropy_Tesla_non_imm) = match foreign_value {
+                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                            _ => continue, // Skip if self_value is None
+                        };
+                        tesla_non_imm_term += (log_K_inv_Tesla_non_imm - entropy_Tesla_non_imm).exp();
+                    }
+                }
+                log_rho = -self_term + iedb_imm_term - iedb_non_imm_term + tesla_imm_term - tesla_non_imm_term;
 
                 // Insert log_rho at current self/foreign params
                 log_rho_dict
@@ -408,49 +513,135 @@ fn compute_log_rho_multi_query_py(
 }
 
 
-
 /*
 AUC section
 */
-#[pyfunction]
-fn calculate_auc_dict(nb_records: Vec<(String, i32, (f64, f64), (f64, f64), f64)>) -> HashMap<String, HashMap<String, Vec<(f64, f64, f64)>>> {
-    /*
-    Returns auc_dict.
-    auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric] = [[FOREIGN_params_numeric[0], query_assay_auc]]
-        FOREIGN_params_numeric[1] is the gamma_logKd value for KInv_foreign 
-        SELF_params_numeric are the gamma_d,gamma_logKd values for KInv_self 
-        FOREIGN_params_numeric[0] is the gamma_d value for KInv_foreign
-     */
-
-    // Compute AUC values in parallel and collect them into a vector of tuples
-    let temp_auc_values: Vec<_> = nb_records
-        .par_iter()
-        .map(|(full_query_epi, immunogenicity, self_params_numeric, foreign_params_numeric, nb)| {
-            let pos_assay = if *immunogenicity == 1 { vec![*nb] } else { Vec::new() };
-            let neg_assay = if *immunogenicity == 0 { vec![*nb] } else { Vec::new() };
-
-            let auc_value = calculate_auc_rs(&pos_assay, &neg_assay).unwrap();
-
-            let foreign_key = format!("{:?}", foreign_params_numeric.0);
-            let self_key = format!("{:?}", self_params_numeric);
-
-            (foreign_key, self_key, foreign_params_numeric.0, auc_value, 0.0)
-        })
-        .collect();
-
-    // Populate auc_dict from temp_auc_values
-    let mut auc_dict = HashMap::new();
-    for (foreign_key, self_key, foreign_numeric, auc_value, _) in temp_auc_values {
-        auc_dict
-            .entry(foreign_key)
-            .or_insert_with(HashMap::new)
-            .entry(self_key)
-            .or_insert_with(Vec::new)
-            .push((foreign_numeric, auc_value, 0.0)); // koncz_auc set to 0 since there's only one assay
-    }
-
-    auc_dict
+#[derive(Debug, Hash, PartialEq, Eq)]
+struct Params {
+    self_params: String,
+    foreign_params: String,
 }
+#[pyfunction]
+pub fn calculate_auc_dict(nb_records: Vec<(String, String, u8, (f64, f64), (f64, f64), f64)>) -> PyResult<HashMap<String, HashMap<String, (f64, f64)>>> {
+    /*
+        Input:list of tuples: (full_query_epi, assay, immunogenicity, SELF_params_numeric, FOREIGN_params_numeric, nb)
+
+        Creates auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric] = [FOREIGN_params_numeric[0], auc]
+        i.e., auc_dict[gamma_logKd_foreign][SELF_params] = [gamma_d_foreign, auc]
+     */
+    
+    let auc_dict: Arc<Mutex<HashMap<String, HashMap<String, (f64, f64)>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let regrouped_inputs: Arc<Mutex<HashMap<Params, (Vec<f64>, Vec<f64>)>>> = Arc::new(Mutex::new(HashMap::new()));
+
+    nb_records.par_iter().for_each(|(self_params, foreign_params, immunogenicity, self_params_tuple, foreign_params_tuple, nb)| {
+        let self_params_str = format!("{:?}", self_params);
+        let foreign_params_str = format!("{:?}", foreign_params);
+        let params = Params {
+            self_params: self_params_str,
+            foreign_params: foreign_params_str,
+        };
+
+        // Locking the mutex to mutate regrouped_inputs
+        let mut regrouped_inputs_lock = regrouped_inputs.lock().unwrap();
+        let entry = regrouped_inputs_lock.entry(params).or_insert_with(|| (Vec::new(), Vec::new()));
+        if *immunogenicity == 0 {
+            entry.0.push(*nb);
+        } else if *immunogenicity == 1 {
+            entry.1.push(*nb);
+        }
+    });
+
+    regrouped_inputs.lock().unwrap().par_iter().for_each(|(params, (records_0, records_1))| {
+        match calculate_auc_rs(&records_0, &records_1) {
+            Ok(auc) => {
+                let foreign_params_tuple = match params.foreign_params.split(", ").collect::<Vec<_>>().as_slice() {
+                    [first, second] => {
+                        let cleaned_second = second.trim_matches(|c| c == '(' || c == ')');
+                        let cleaned_first = first.trim_matches(|c| c == '(' || c == ')');
+                        (cleaned_first.parse::<f64>().unwrap(), cleaned_second.parse::<f64>().unwrap())
+                    },
+                    _ => return (),
+                };
+
+                let foreign_params_key = foreign_params_tuple.1.to_string();
+                let self_params_key = params.self_params.clone();
+                let mut auc_dict = auc_dict.lock().unwrap();
+                auc_dict
+                    .entry(foreign_params_key.clone())
+                    .or_insert_with(HashMap::new)
+                    .insert(self_params_key, (foreign_params_tuple.0, auc));
+            },
+            Err(err) => { /* Handle error */ },
+        }
+    });
+
+    // Extract the HashMap from Arc<Mutex<HashMap<...>>>
+    let auc_dict = Arc::try_unwrap(auc_dict).unwrap().into_inner().unwrap();
+    Ok(auc_dict)
+}
+// pub fn calculate_auc_dict(nb_records: Vec<(String, String, u8, (f64, f64), (f64, f64), f64)>) -> PyResult<HashMap<String, HashMap<String, (f64, f64)>>> {
+//         /*
+//     Creates auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric] = [FOREIGN_params_numeric[0], auc]
+//      */
+//     let mut auc_dict: HashMap<String, HashMap<String, (f64, f64)>> = HashMap::new();
+
+
+//     // Create the HashMap to store the regrouped_inputs
+//     let mut regrouped_inputs: HashMap<Params, (Vec<f64>, Vec<f64>)> = HashMap::new();
+
+//     for (_, _, immunogenicity, self_params, foreign_params, nb) in nb_records {
+        
+//         // Convert the tuples to strings using {:?} formatting
+//         let self_params_str = format!("{:?}", self_params);
+//         let foreign_params_str = format!("{:?}", foreign_params);
+
+//         // Create the Params struct for the key
+//         let params = Params {
+//             self_params: self_params_str,
+//             foreign_params: foreign_params_str,
+//         };
+
+//         // Get the entry from the HashMap or insert it if it doesn't exist
+//         let entry = regrouped_inputs.entry(params).or_insert_with(|| (Vec::new(), Vec::new()));
+
+//         // Append nb to the appropriate vector based on immunogenicity
+//         if immunogenicity == 0 {
+//             entry.0.push(nb);
+//         } else if immunogenicity == 1 {
+//             entry.1.push(nb);
+//         }
+//     }
+
+//     for (params, (records_0, records_1)) in &regrouped_inputs {
+//         match calculate_auc_rs(&records_0, &records_1) {
+//             Ok(auc) => {
+//                 // Parse the foreign_params string into a tuple and extract the second element
+//                 let foreign_params_tuple = match params.foreign_params.split(", ").collect::<Vec<_>>().as_slice() {
+//                     [first, second] => {
+//                         // Trim any leading or trailing whitespace and remove parentheses if present
+//                         let cleaned_second = second.trim_matches(|c| c == '(' || c == ')');
+//                         let cleaned_first = first.trim_matches(|c| c == '(' || c == ')');
+//                         (cleaned_first.parse::<f64>().unwrap(), cleaned_second.parse::<f64>().unwrap())
+//                     },
+//                     _ => return Err(CalculationError::InvalidInput.into()),
+//                 };
+
+//                 let foreign_params_key = foreign_params_tuple.1.to_string();
+//                 let self_params_key = params.self_params.clone();
+
+//                 // Insert AUC values into auc_dict
+//                 auc_dict
+//                     .entry(foreign_params_key.clone())
+//                     .or_insert_with(HashMap::new)
+//                     .insert(self_params_key, (foreign_params_tuple.0,auc));
+//             },
+//             Err(err) => return Err(err.into()),
+//         }
+//     }
+//     Ok(auc_dict)
+// }
+
+
 
 // A Python module implemented in Rust.
 #[pymodule]
