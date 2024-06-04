@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
 
     
-    
+
     '''
     TODO: 
     1. Test new code that restricts target epitope sets based on hla.
@@ -201,7 +201,7 @@ if __name__ == "__main__":
         gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  )))
 
         gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 10),10)) + list(np.round(create_log_spaced_list(1, 5, 8),4)) + [1e-8, 1e-100])))
-        gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  +[1e-8, 1e-100])))
+        gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  +[1e-7, 1e-8, 1e-100])))
         #################################################################################################
         #################################################################################################
         ##                                 Self settings.
