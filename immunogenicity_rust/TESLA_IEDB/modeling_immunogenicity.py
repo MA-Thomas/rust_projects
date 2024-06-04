@@ -43,15 +43,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-cTEC", action='store_true', default=False, help="whether to use cTEC gene expression")
     parser.add_argument("-cTEC_conc", action='store_true', default=False)
-    parser.add_argument("-save_pkl_dir", default="/Users/experimental/Work_Data/rust_outputs_local/immunogenicity_outputs")
+    parser.add_argument("-save_pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs")
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
 
-    parser.add_argument("-data_matrix_dir", default="/Users/experimental/Work_Data/Conifold_editing/CFIT/cfit/data/matrices/")
-    parser.add_argument("-self_fasta_path", default="/Users/experimental/Work_Data/Self_Epitopes/self_peptides.fasta")
-    parser.add_argument("-immunogenic_Koncz_fasta_path", default="/Users/experimental/Work_Data/Foreign_Epitopes/immunogenic_Koncz_peptides.fasta")
-    parser.add_argument("-nonimmunogenic_Koncz_fasta_path", default="/Users/experimental/Work_Data/Foreign_Epitopes/nonimmunogenic_Koncz_peptides.fasta")
-    parser.add_argument("-immunogenic_Ours_fasta_path", default="/Users/experimental/Work_Data/Foreign_Epitopes/immunogenic_Ours_peptides.fasta")
-    parser.add_argument("-nonimmunogenic_Ours_fasta_path", default="/Users/experimental/Work_Data/Foreign_Epitopes/nonimmunogenic_Ours_peptides.fasta")
     parser.add_argument("-data_matrix_dir", default="/Users/marcus/Work_Data/Conifold_editing/CFIT/cfit/data/matrices/")
     parser.add_argument("-self_fasta_path", default="/Users/marcus/Work_Data/Self_Epitopes/self_peptides.fasta")
     parser.add_argument("-immunogenic_Koncz_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Koncz_peptides.fasta")
@@ -62,11 +56,11 @@ if __name__ == "__main__":
     parser.add_argument("-immunogenic_Tesla_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Tesla_peptides.fasta")
     parser.add_argument("-nonimmunogenic_Tesla_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_Tesla_peptides.fasta")
 
-    parser.add_argument("-csv_S_dir", default="/Users/experimental/Work_Data/Self_Epitopes")
-    parser.add_argument("-csv_F_dir", default="/Users/experimental/Work_Data/Foreign_Epitopes")
+    parser.add_argument("-csv_S_dir", default="/Users/marcus/Work_Data/Self_Epitopes")
+    parser.add_argument("-csv_F_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
 
-    parser.add_argument("-tesla_variables_dir", default="/Users/experimental/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
-    parser.add_argument("-iedb_variables_dir", default="/Users/experimental/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
+    parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
+    parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
     
     parser.add_argument("-load_target_hla_epi_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
 
@@ -75,6 +69,7 @@ if __name__ == "__main__":
     parser.add_argument("-inclusive_start_ind", default="0")
     parser.add_argument("-inclusive_end_ind", default="0")
     args = parser.parse_args()
+
 
 
     
