@@ -194,6 +194,7 @@ if __name__ == "__main__":
         # gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 12),10)) + list(np.round(create_log_spaced_list(1, 5, 15),4)) + [1e-8, 1e-100])))
         # gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  +[1e-8, 1e-100])))
 
+
         gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(2e-4, 1, 7),4)) )))
         gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 15),4))  )))
 
@@ -372,7 +373,7 @@ if __name__ == "__main__":
         use_Ours_contribution = True 
         use_Koncz_contribution = True
         use_Tesla_contribution = True 
-        
+
         log_rho_dict, runtime = immunogenicity_rust.compute_log_rho_multi_query_py(
             logKInv_entropy_self_dict, 
             logKInv_entropy_Ours_imm_epi_dict,
