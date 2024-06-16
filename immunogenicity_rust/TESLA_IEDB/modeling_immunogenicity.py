@@ -64,23 +64,18 @@ if __name__ == "__main__":
     
     parser.add_argument("-load_target_hla_epi_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
 
-    parser.add_argument("-allele", default='A0301')
+    parser.add_argument("-allele", default='A0201')
 
-    parser.add_argument("-inclusive_start_ind", default="38")
+    parser.add_argument("-inclusive_start_ind", default="1807")
     parser.add_argument("-inclusive_end_ind", default="2000")
     args = parser.parse_args()
 
 
-
-    
-
-    '''
-    TODO: 
-    1. Test new code that restricts target epitope sets based on hla.
-    2. Add tesla target epitope sets to rust functions
-
-    '''
-
+    # pos = [0.1, 0.4, 0.35]
+    # neg = [0.32, 0.8, 0.01]
+    # auc = immunogenicity_rust.calculate_auc_py(pos,neg)
+    # print("auc: ", auc)
+    # assert(1==2)
     '''
     distance metric types (ninemer) 
     ['all_tcr_all_combos_model',
@@ -168,7 +163,10 @@ if __name__ == "__main__":
         query_epi_list = row['peptides']
         print(query_epi_list, allele)
 
+
+
         if save_query_distance_files:
+            # # The 'QUERYEPISTR' substring will be replaced by the actual query epi in the rust script.
             csv_S_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_self_distances.csv")
             csv_KImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Koncz_imm_distances.csv")
             csv_KNImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Koncz_nonimm_distances.csv")
@@ -195,18 +193,20 @@ if __name__ == "__main__":
 
         gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(1e-1, 5, 6),4)) + [1e-8, 1e-100])))
         gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 10),4))  +[1e-8, 1e-100])))
+        
+        
         #################################################################################################
         #################################################################################################
         ##                                 Self settings.
         
-        d_ub = 70.0 # # distances above this threshold do not contirbute to Kinv_self (models positive selection)
-        d_lb = 3.14 # # distances below this cutoff do not contribute to Kinv_self (partially models negative selection)
+        d_ub = 100 #70.0 # # (inclusive bound) distances at or below this threshold contirbute to Kinv_self (models positive selection)
+        d_lb = 0 #3.14 # # (exclusive bound) distances above this cutoff contribute to Kinv_self (partially models negative selection)
         #################################################################################################
         #################################################################################################
 
         target_epitopes_at_allele = ['all']
         compute_logCh = True
-        calc_second_hm_without_dist_restriction = True #logKInv_self and entropy for rho(e,h)
+        calc_second_hm_without_dist_restriction = False #True #logKInv_self and entropy for rho(e,h)
         logKInv_entropy_self_dict, logKInv_entropy_self_for_rho_dict, logCh_dict, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
             query_epi_list, 
             [(csv_S_dists_file,load_precomputed_distances,self_fasta_path)],csv_S_kds_file,
@@ -221,6 +221,8 @@ if __name__ == "__main__":
             target_epitopes_at_allele,
             calc_second_hm_without_dist_restriction,
         )
+        if calc_second_hm_without_dist_restriction == False:
+                logKInv_entropy_self_for_rho_dict = logKInv_entropy_self_dict
 
         print("len(logKInv_entropy_self_dict): ",len(logKInv_entropy_self_dict))
         print("A few items from logKInv_entropy_self_dict: ")
@@ -396,22 +398,7 @@ if __name__ == "__main__":
             use_Tesla_contribution,
         )
         print("[python] log_rho_dict runtime: ",runtime)
-        # print("len(log_rho_dict): ",len(log_rho_dict))
-        # print("One item from log_rho_dict: ")
-        # for key, value in itertools.islice(log_rho_dict.items(), 1):
-        #     for key2, value2 in itertools.islice(log_rho_dict[key].items(), 1):
-        #         print(f"{key}:{key2}: {value2}")
-
-        # immunogenicity_rust.store_model_dicts(
-        #     logKInv_entropy_self_dict,
-        #     logKInv_entropy_Koncz_imm_epi_dict,
-        #     logKInv_entropy_Koncz_non_imm_epi_dict,
-        #     logKInv_entropy_Ours_imm_epi_dict,
-        #     logKInv_entropy_Ours_non_imm_epi_dict,
-        #     logCh_dict,
-        #     log_rho_dict,
-        # )
-        print("Now saving to .pkl")
+        print("Now saving to .pkl ...")
         outputs = [logKInv_entropy_self_dict, logCh_dict, logKInv_entropy_Koncz_imm_epi_dict, logKInv_entropy_Koncz_non_imm_epi_dict, 
                    logKInv_entropy_Ours_imm_epi_dict, logKInv_entropy_Ours_non_imm_epi_dict,
                    log_rho_dict]

@@ -94,7 +94,7 @@ gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_li
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs")
+    parser.add_argument("-pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs/d_ub_70.0_d_lb_3.14")
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
     parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     tesla_auc_dict = immunogenicity_rust.calculate_auc_dict(nb_tesla_records)
     iedb_auc_dict = immunogenicity_rust.calculate_auc_dict(nb_iedb_records)
     print("rust auc_dict runtime:", time.time() - start_time2)
-    assert(1==2)
+    # assert(1==2)
 #%%
 
     start_time3 = time.time()
@@ -169,6 +169,7 @@ if __name__ == "__main__":
 
                 
     keys_ranking_list.sort(key=lambda x: x[2], reverse=True)
+    print("keys_ranking_list[:10]: ", keys_ranking_list[:10])
     print("key_list runtime:", time.time() - start_time3)
 #%%
 

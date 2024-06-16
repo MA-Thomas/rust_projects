@@ -3,6 +3,12 @@ use std::fs::{File, remove_file, create_dir_all};
 use std::io::BufReader;
 use std::error::Error;
 
+use pyo3::exceptions::PyException;
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use pyo3::exceptions::PyRuntimeError;
+
 #[derive(Debug, serde::Deserialize)]
 pub struct JSONData {
     // If fields may or may not appear in the json (e.g., epidist_blosum62_distance vs all_tcr_all_combos_model), use the Option<> type.
@@ -190,4 +196,65 @@ pub fn have_same_keys(map1: &HashMap<String, f64>, map2: &HashMap<String, f64>) 
     let keys1: HashSet<_> = map1.keys().collect();
     let keys2: HashSet<_> = map2.keys().collect();
     keys1 == keys2
+}
+
+// Define a function to generate variants of the key.
+/*
+This is useful when looking for a hashmap value associated with a key such as '1.0'
+when the true key is '1'. The two forms, '1.0' and '1' are considered here as variants 
+of the same key. 
+*/
+pub fn generate_variants(key: &str) -> Vec<String> {
+    let mut variants = vec![key.to_string()];
+
+    // Add additional variants as needed
+    if let Ok(float_value) = key.parse::<f64>() {
+        variants.push(format!("{:.1}", float_value)); // Adjust precision as needed
+        variants.push(format!("{:.0}", float_value)); // Integer format
+    }
+
+    variants
+}
+pub fn print_keys_diff<K, V>(map1: &HashMap<K, V>, map2: &HashMap<K, V>)
+where
+    K: std::hash::Hash + Eq + std::fmt::Debug,
+{
+    let keys1: HashSet<_> = map1.keys().collect();
+    let keys2: HashSet<_> = map2.keys().collect();
+
+    let only_in_map1: HashSet<_> = keys1.difference(&keys2).collect();
+    let only_in_map2: HashSet<_> = keys2.difference(&keys1).collect();
+
+    println!("Keys found only in map1 ({}):", only_in_map1.len());
+    // for key in &only_in_map1 {
+    //     println!("{:?}", key);
+    // }
+
+    println!("Keys found only in map2 ({}):", only_in_map2.len());
+    // for key in &only_in_map2 {
+    //     println!("{:?}", key);
+    // }
+}
+
+// Auxiliary function to convert PyDict to HashMap<String, Option<(f64, f64)>>
+pub fn convert_nested_PyDict_to_HashMap(dict: &PyDict) -> PyResult<HashMap<String, HashMap<String, Option<(f64, f64)>>>> {
+    let mut result_hashm: HashMap<String, HashMap<String, Option<(f64, f64)>>> = HashMap::new();
+
+    for (key, value) in dict {
+        let key_str: String = key.extract()?;
+        let nested_dict = value.extract::<&PyDict>()?; // Extract reference to PyDict
+
+        let mut nested_hashm: HashMap<String, Option<(f64, f64)>> = HashMap::new();
+        for (nested_key, nested_value) in nested_dict.iter() { // Iterate over reference to PyDict
+            let nested_key_str: String = nested_key.extract()?;
+            if let Ok((v1, v2)) = nested_value.extract::<(f64, f64)>() {
+                nested_hashm.insert(nested_key_str, Some((v1, v2)));
+            } else {
+                nested_hashm.insert(nested_key_str, None);
+            }
+        }
+        result_hashm.insert(key_str, nested_hashm);
+    }
+
+    Ok(result_hashm)
 }

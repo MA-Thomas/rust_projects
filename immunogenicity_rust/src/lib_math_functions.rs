@@ -1,4 +1,3 @@
-use eval_metrics::classification::{RocCurve, RocPoint, PrCurve, PrPoint};
 use std::f64::consts::E;
 
 #[derive(Debug)]
@@ -6,27 +5,23 @@ pub enum CalculationError {
     InvalidInput,
     RocCurveError,
 }
-pub fn calculate_auc_rs(pos: &[f64], neg: &[f64]) -> Result<f64, CalculationError> {
+pub fn calculate_auc(pos: &[f64], neg: &[f64]) -> Result<f64, CalculationError> {
+    // Check if input slices are empty
     if pos.is_empty() || neg.is_empty() {
         return Err(CalculationError::InvalidInput);
     }
 
-    // Combine positive and negative scores into a single vector
-    let mut scores = Vec::with_capacity(pos.len() + neg.len());
-    scores.extend_from_slice(pos);
-    scores.extend_from_slice(neg);
+    // Combine positive and negative scores into a single vector of (label, score) pairs
+    let mut pairs: Vec<(bool, f64)> = pos.iter().map(|&score| (true, score)).collect();
+    pairs.extend(neg.iter().map(|&score| (false, score)));
 
-    // Create labels corresponding to positive and negative scores
-    let mut labels = vec![false; neg.len()];
-    labels.extend_from_slice(&vec![true; pos.len()]);
-
-    // Construct ROC curve
-    let roc = RocCurve::compute(&scores, &labels).map_err(|_| CalculationError::RocCurveError)?;
-    let auc = roc.auc();
-
-    Ok(auc)
+    // Compute ROC AUC score
+    if let Some(auc) = classifier_measures::roc_auc_mut(&mut pairs) {
+        Ok(auc)
+    } else {
+        Err(CalculationError::RocCurveError)
+    }
 }
-
 
 impl From<CalculationError> for pyo3::PyErr {
     fn from(error: CalculationError) -> Self {

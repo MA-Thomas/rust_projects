@@ -11,6 +11,12 @@ use flate2::Compression;
 
 use flate2::read::GzDecoder;
 use tar::Archive;
+use std::collections::HashMap;
+use serde_pickle::from_reader;
+use serde::Deserialize;
+
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
 
 // This script contains I/O functions that do not belong to an impl block for a custom type.
 
@@ -223,3 +229,61 @@ pub fn load_epitopes_kds_from_tar_gz(csv_kds_file_path: &str) -> Result<Vec<Targ
 }
 
 
+#[derive(Deserialize, Clone)]
+pub struct PickleContents {
+    pub logKInv_entropy_self_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub logCh_dict: HashMap<String, Option<f64>>,
+    pub logKInv_entropy_Koncz_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub logKInv_entropy_Koncz_non_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub logKInv_entropy_Ours_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub logKInv_entropy_Ours_non_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub log_rho_multi_query_dict: HashMap<String, HashMap<String, HashMap<String, Option<f64>> > >,
+}
+
+pub fn load_epi_hla_pkl_file(pkl_file_path: &str) -> Result<PickleContents, Box<dyn Error>> {
+    // Open the file
+    let mut file = File::open(pkl_file_path)?;
+    
+    // Read the contents of the file into a buffer
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+
+    // Deserialize the data
+    // let outputs: PickleContents = from_reader(&buffer[..])?;
+    let outputs: PickleContents = from_reader(&buffer[..], Default::default())?;
+
+    Ok(outputs)
+}
+
+pub fn load_all_pkl_files(file_paths: &[&str]) -> Result<Vec<PickleContents>, Box<dyn Error>> {
+    let pickle_contents_vec: Arc<Mutex<Vec<PickleContents>>> = Arc::new(Mutex::new(Vec::new()));
+
+    file_paths.par_iter().for_each(|&file_path| {
+        match load_epi_hla_pkl_file(file_path) {
+            Ok(contents) => {
+                let mut vec = pickle_contents_vec.lock().unwrap();
+                vec.push(contents);
+            },
+            Err(e) => eprintln!("Failed to load and deserialize file {:?}: {}", file_path, e),
+        }
+    });
+
+    let mut result_vec = Vec::new();
+    {
+        let vec = pickle_contents_vec.lock().unwrap();
+        result_vec.extend_from_slice(&*vec);
+    }
+    Ok(result_vec)
+}
+// pub fn load_all_pkl_files(file_paths: &[&str]) -> Result<Vec<PickleContents>, Box<dyn Error>> {
+//     let mut pickle_contents_vec = Vec::new();
+
+//     for &file_path in file_paths {
+//         match load_epi_hla_pkl_file(file_path) {
+//             Ok(contents) => pickle_contents_vec.push(contents),
+//             Err(e) => eprintln!("Failed to load and deserialize file {:?}: {}", file_path, e),
+//         }
+//     }
+
+//     Ok(pickle_contents_vec)
+// }
