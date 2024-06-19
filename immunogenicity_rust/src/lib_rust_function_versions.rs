@@ -348,12 +348,7 @@ pub fn compute_logKinv_and_entropy_dict_rs(
                             }
                         }
                     };
-                    // let entropy = match compute_entropy(values_slice, result) {
-                    //     Some(entropy) => entropy,
-                    //     None => {
-                    //         panic!("Error calculating entropy: entropy value is None.");
-                    //     }
-                    // };
+
                     let key = tuple_to_string(&(gamma_d_value, gamma_logKd_value));
                     (key, Some((result, entropy)))
                 })
