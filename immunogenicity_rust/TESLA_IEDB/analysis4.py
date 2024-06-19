@@ -70,11 +70,11 @@ gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_li
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs/d_ub_100_d_lb_0")
+    parser.add_argument("-pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs/d_ub_70.0_d_lb_3.14")
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
     parser.add_argument("-tesla_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/TESLA")
     parser.add_argument("-iedb_variables_dir", default="/Users/marcus/Work_Data/Minerva_editing/CFIT_Editing/bin/IEDB")
-    parser.add_argument("-allele", default='A0201')
+    parser.add_argument("-allele", default='A0301')
     args = parser.parse_args()
 
     start_time = time.time()
@@ -159,9 +159,9 @@ if __name__ == "__main__":
 
 ###############################################################################
 #%% COMPUTE AUC_DICT DIRECTLY IN RUST
-    
-    tesla_auc_dict = immunogenicity_rust.calculate_auc_dict_from_pickle_files_py(tesla_pos_pkl_list,tesla_neg_pkl_list)
-    koncz_auc_dict = immunogenicity_rust.calculate_auc_dict_from_pickle_files_py(koncz_pos_pkl_list,koncz_neg_pkl_list)
+    num_self_params_per_iter = 30
+    tesla_auc_dict = immunogenicity_rust.calculate_auc_dict_from_pickle_files_py(tesla_pos_pkl_list,tesla_neg_pkl_list, num_self_params_per_iter)
+    koncz_auc_dict = immunogenicity_rust.calculate_auc_dict_from_pickle_files_py(koncz_pos_pkl_list,koncz_neg_pkl_list, num_self_params_per_iter)
 
 
     # print("tesla_auc_dict: ",tesla_auc_dict)
@@ -172,11 +172,11 @@ if __name__ == "__main__":
     foreign_key_1_set = set()
     foreign_key_0_set = set()
     auc_dict = {}
-    for foreign_key_str in tesla_auc_dict:
-        foreign_key = ast.literal_eval(foreign_key_str)
+    for self_key_str in tesla_auc_dict:
+        self_key = ast.literal_eval(self_key_str)
         
-        for self_key_str in tesla_auc_dict[foreign_key_str]:
-            self_key = ast.literal_eval(self_key_str)
+        for foreign_key_str in tesla_auc_dict[self_key_str]:
+            foreign_key = ast.literal_eval(foreign_key_str)
             
             
             if foreign_key[1] not in auc_dict:
@@ -187,21 +187,21 @@ if __name__ == "__main__":
                 auc_dict[foreign_key[1]][self_key] = []
 
             
-            tesla_auc = tesla_auc_dict[foreign_key_str][self_key_str]
-            koncz_auc = koncz_auc_dict[foreign_key_str][self_key_str]
+            tesla_auc = tesla_auc_dict[self_key_str][foreign_key_str]
+            koncz_auc = koncz_auc_dict[self_key_str][foreign_key_str]
             
             auc_dict[foreign_key[1]][self_key].append( (foreign_key[0],tesla_auc, koncz_auc) )
             
 
 #%%
     keys_ranking_list = []
-    for foreign_key in auc_dict:
-        for self_key in auc_dict[foreign_key]:
+    for foreign_gamma_logKd in auc_dict:
+        for self_params_key in auc_dict[foreign_gamma_logKd]:
             # Sort the values (lists) within each key based on the fourth element (koncz_auc)
-            auc_dict[foreign_key][self_key].sort(key=lambda x: x[1], reverse=True)
+            auc_dict[foreign_gamma_logKd][self_params_key].sort(key=lambda x: x[1], reverse=True)
 
             # #vConvert the list to a DataFrame
-            df = pd.DataFrame(auc_dict[foreign_key][self_key], columns=['gamma_d_nonself', 'tesla_auc', 'koncz_auc'])
+            df = pd.DataFrame(auc_dict[foreign_gamma_logKd][self_params_key], columns=['gamma_d_nonself', 'tesla_auc', 'koncz_auc'])
             
             
             '''
@@ -218,35 +218,36 @@ if __name__ == "__main__":
             '''
             rho_tesla_contribution = df['tesla_auc'].max() * df['tesla_auc'].mean()
             rho_koncz_contribution = df['koncz_auc'].max() * df['koncz_auc'].mean()
-            ranking_statistic = rho_tesla_contribution *  rho_koncz_contribution
-
+            # ranking_statistic = rho_tesla_contribution *  rho_koncz_contribution
+            ranking_statistic = max((rho_tesla_contribution-0.5),0) *  max((rho_koncz_contribution-0.5),0)
             
             # # COMBAT OVERFITTING DUE TO THE FOREIGN_params
             '''
             Add contribution to ranking statistic from model with reduced rho.
             FOREIGN_params==(1e-100,1e-100)        
             (rho is basically 1 in this setting)
+            reduced_rho_foreign_list = (gamma_d_foreign, tesla_auc, koncz_auc)
             '''
-            reduced_rho_foreign_list = sorted(auc_dict[1e-100][self_key], key=lambda x: x[0])[0]
+            reduced_rho_foreign_list = sorted(auc_dict[1e-100][self_params_key], key=lambda x: x[0])[0]
             '''
             Add contribution to ranking statistic from model with reduced rho.
             FOREIGN_params==(gamma_d_foreign,1e-100)         
             (rho depends only on the presentation of the target epitopes under
               the hla of the query)
             '''            
-            # reduced_rho_foreign_list = sorted(auc_dict[foreign_key][self_key], key=lambda x: x[0])[0]
+            # reduced_rho_foreign_list = sorted(auc_dict[foreign_gamma_logKd][self_key], key=lambda x: x[0])[0]
             
             reduced_rho_tesla_contribution = reduced_rho_foreign_list[1]
             reduced_rho_koncz_contribution = reduced_rho_foreign_list[2]
-            ranking_statistic *= reduced_rho_tesla_contribution * reduced_rho_koncz_contribution
+            # ranking_statistic *= reduced_rho_tesla_contribution * reduced_rho_koncz_contribution
+            ranking_statistic *= max((reduced_rho_tesla_contribution-0.5),0) *  max((reduced_rho_koncz_contribution-0.5),0)
             
-            
-            keys_ranking_list.append([foreign_key,self_key,rho_tesla_contribution, rho_koncz_contribution, reduced_rho_tesla_contribution, reduced_rho_koncz_contribution, ranking_statistic])
+            keys_ranking_list.append([foreign_gamma_logKd,self_params_key,rho_tesla_contribution, rho_koncz_contribution, reduced_rho_tesla_contribution, reduced_rho_koncz_contribution, ranking_statistic])
 
                 
     keys_ranking_list.sort(key=lambda x: x[6], reverse=True)
-    print("keys_ranking_list[0]: ", keys_ranking_list[:10])
-
+    print("keys_ranking_list[:10]: ", keys_ranking_list[:10])
+    print("")
     print("auc_dict[keys_ranking_list[0][0]][keys_ranking_list[0][1]]: ",auc_dict[keys_ranking_list[0][0]][keys_ranking_list[0][1]])
     print("runtime:", time.time() - start_time)
     

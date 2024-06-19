@@ -12,7 +12,7 @@ use std::fmt;
 ////////////   Import from other scripts via the main module.   //////////////
 use crate::*; // Import from the main module (lib.rs)
 use crate::lib_data_structures_auxiliary_functions::{DistanceMetricType, DistanceMetricContext, TargetEpiDistances, tuple_to_string, generate_variants};
-use lib_io::{PickleContents, set_json_path, evaluate_context, load_all_pkl_files};
+use lib_io::{PickleContents, set_json_path, evaluate_context, load_epi_hla_pkl_file, load_all_pkl_files};
 use lib_math_functions::{EntropyError, log_sum, compute_entropy, calculate_auc};
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
@@ -610,6 +610,7 @@ pub fn compute_log_rho_multi_query_rs(
 ) -> Result<(HashMap<String, HashMap<String, HashMap<String, Option<f64>>>>, u64), String> {
     let start_time = std::time::Instant::now();
 
+    // log_rho_multi_query_dict keys: [epitope][self_params][foreign_params]
     let mut log_rho_multi_query_dict: HashMap<String, HashMap<String, HashMap<String, Option<f64>>>> = HashMap::new();
     
     for query_epi in query_dict_logKInv_entropy_self.keys() { 
@@ -799,16 +800,17 @@ impl fmt::Display for MyError {
     }
 }
 pub fn immunogenicity_dict_from_pickle_files_rs(
-    file_paths: &[&str],
+    file_paths: &[&str], filter_on_self_param_keys: Option<&[&str]>,
 ) -> Result<HashMap<String, HashMap<String, Vec<f64>>>, Box<dyn StdError>> {
     // Load pickle files
     let start_time = std::time::Instant::now();
-    let pickle_contents_vec = load_all_pkl_files(file_paths)?;
-    let end_time = std::time::Instant::now();
-    let elapsed_time = (end_time - start_time).as_secs_f64();
-    println!("Elapsed time for load_all_pkl_files(): {:.6} seconds", elapsed_time);
+    let pickle_contents_vec = load_all_pkl_files(file_paths, filter_on_self_param_keys)?;
+    // let end_time = std::time::Instant::now();
+    // let elapsed_time = (end_time - start_time).as_secs_f64();
+    // println!("Elapsed time for load_all_pkl_files(): {:.6} seconds", elapsed_time);
 
     // Initialize the result dictionary
+    // keys: [self_params][foreign_params]
     let mut immunogenicity_dict: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
 
     // Parallel processing for each PickleContents
@@ -823,12 +825,14 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
             } = pickle_contents;
 
             // Local result dictionary for this thread
+            // keys: [self_params][foreign_params]
             let mut local_immunogenicity_dict: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
 
             // Cache logCh_dict lookups
             let mut logCh_cache = HashMap::new();
 
             // Process each entry in log_rho_multi_query_dict
+            // log_rho_multi_query_dict keys: [epitope][self_params][foreign_params]
             for (query_epi, log_rho_dict) in log_rho_multi_query_dict {
                 for (self_params, foreign_params_dict) in log_rho_dict {
                     let gamma_logKd_str = get_nth_element(&self_params, 1);
@@ -859,9 +863,9 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
                                         let nb = (log_non_rho + log_rho).exp();
 
                                         local_immunogenicity_dict
-                                            .entry(foreign_params.clone())
-                                            .or_insert_with(HashMap::new)
                                             .entry(self_params.clone())
+                                            .or_insert_with(HashMap::new)
+                                            .entry(foreign_params.clone())
                                             .or_insert_with(Vec::new)
                                             .push(nb);
                                     }
@@ -886,12 +890,12 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
 
     // Merge results from all threads into the main immunogenicity_dict
     for thread_result in result {
-        for (foreign_params, self_params_map) in thread_result {
-            for (self_params, nb_vec) in self_params_map {
+        for (self_params, foreign_params_map) in thread_result {
+            for (foreign_params, nb_vec) in foreign_params_map {
                 immunogenicity_dict
-                    .entry(foreign_params.clone())
-                    .or_insert_with(HashMap::new)
                     .entry(self_params.clone())
+                    .or_insert_with(HashMap::new)
+                    .entry(foreign_params.clone())
                     .or_insert_with(Vec::new)
                     .extend(nb_vec);
             }
@@ -902,7 +906,106 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
 }
 
 
+fn partition_keys(self_param_keys_1: &HashSet<String>, n: usize) -> Vec<Vec<&str>> {
+    // Convert the HashSet to a Vec for easier indexing
+    let mut keys_vec: Vec<&str> = self_param_keys_1.iter().map(|s| s.as_str()).collect();
+    let mut chunks = Vec::new();
 
+    keys_vec.sort();
+
+    // Partition the keys into chunks of size n
+    for chunk in keys_vec.chunks(n) {
+        chunks.push(chunk.to_vec());
+    }
+
+    chunks
+}
+pub fn calculate_auc_dict_iteratively_from_pickle_files_rs(
+    file_paths_list1: Vec<&str>,
+    file_paths_list2: Vec<&str>,
+    num_self_params_per_iter: usize,
+) -> Result<HashMap<String, HashMap<String, f64>>, Box<dyn Error>> {
+    let start_time = std::time::Instant::now(); 
+
+    // Initialize the AUC dictionary
+    let mut auc_dict: HashMap<String, HashMap<String, f64>> = HashMap::new();
+
+    /*
+    non parallel version. 
+    Instead of creating the auc_dict by generating the full immunogenicity_dict 
+    (can be multiple GB if there are many epi-hla .pkl files and each is a few MB),
+    we can iteratively build the auc_dict one outer key (foreign paramset) at a time.
+    We need to first determine the set of all outer keys.
+     */
+    
+    // Collect all outer keys from first .pkl in file_paths_list1
+    let mut self_param_keys_1 = HashSet::new();
+    if let Some(first_file_path) = file_paths_list1.first() {
+        if let Ok(contents) = load_epi_hla_pkl_file(first_file_path, None) {
+            for inner_map in contents.logKInv_entropy_self_dict.values() {
+                self_param_keys_1.extend(inner_map.keys().cloned());
+            }
+        }
+    }
+    // Collect all outer keys from first .pkl in file_paths_list2
+    let mut self_param_keys_2 = HashSet::new();
+    if let Some(first_file_path) = file_paths_list1.first() {
+        if let Ok(contents) = load_epi_hla_pkl_file(first_file_path, None) {
+            for inner_map in contents.logKInv_entropy_self_dict.values() {
+                self_param_keys_2.extend(inner_map.keys().cloned());
+            }
+        }
+    }
+
+    // Assert that the two file lists have the same outer keys
+    // println!("self_param_keys_1: {:?}",self_param_keys_1);
+    // println!("self_param_keys_2: {:?}",self_param_keys_2);
+    assert_eq!(self_param_keys_1, self_param_keys_2); 
+
+    // Next, ITERATE OVER OUTER KEYS 
+    for self_param_keys in partition_keys(&self_param_keys_1, num_self_params_per_iter) {
+        let key_option: Option<&[&str]> = Some(&self_param_keys);
+        println!("");
+        println!("self_param_keys: {:?}", self_param_keys);
+        println!("");
+        println!("len(self_param_keys):  {}", self_param_keys.len());
+        println!("");
+        println!("len(self_param_keys_1): {}", self_param_keys_1.len());
+        println!("");
+        // Call immunogenicity_dict_from_pickle_files_rs for both lists at the current keys (self param sets)
+        let immunogenicity_dict_1 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, key_option)?;
+        let immunogenicity_dict_2 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list2, key_option)?;
+
+        // Iterate over the first dictionary
+        for (self_params, inner_map_1) in immunogenicity_dict_1.iter() {
+            // Check if the second dictionary contains the same foreign_params
+            if let Some(inner_map_2) = immunogenicity_dict_2.get(self_params) {
+                // Initialize the inner map for the AUC values
+                let mut computed_values_map: HashMap<String, f64> = HashMap::new();
+                
+                // Iterate over the inner map of the first dictionary
+                for (foreign_params, vector_1) in inner_map_1.iter() {
+                    // Check if the second inner map contains the same self_params
+                    if let Some(vector_2) = inner_map_2.get(foreign_params) {
+                        // Calculate AUC and insert into the inner map
+                        if let Ok(auc_value) = calculate_auc(vector_1, vector_2) {
+                            computed_values_map.insert(foreign_params.to_string(), auc_value);
+                        }
+                    }
+                }
+
+                // Insert the inner map into the AUC dictionary
+                auc_dict.insert(self_params.to_string(), computed_values_map);
+            }
+        }
+
+    }
+   
+    let end_time = std::time::Instant::now();
+    let elapsed_time = (end_time - start_time).as_secs_f64();
+    println!("Elapsed time for calculate_auc_dict_iteratively_from_pickle_files_rs(): {:.6} seconds", elapsed_time);
+    Ok(auc_dict)
+}
 
 pub fn calculate_auc_dict_from_pickle_files_rs(
     file_paths_list1: Vec<&str>,
@@ -912,70 +1015,34 @@ pub fn calculate_auc_dict_from_pickle_files_rs(
     non parallel version
      */
     // Call immunogenicity_dict_from_pickle_files_rs for both lists
-    let immunogenicity_dict_1 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list1)?;
-    let immunogenicity_dict_2 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list2)?;
+    let immunogenicity_dict_1 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, None)?;
+    let immunogenicity_dict_2 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list2, None)?;
 
     // Initialize the AUC dictionary
     let mut auc_dict: HashMap<String, HashMap<String, f64>> = HashMap::new();
 
     // Iterate over the first dictionary
-    for (foreign_params, inner_map_1) in immunogenicity_dict_1.iter() {
+    for (self_params, inner_map_1) in immunogenicity_dict_1.iter() {
         // Check if the second dictionary contains the same foreign_params
-        if let Some(inner_map_2) = immunogenicity_dict_2.get(foreign_params) {
+        if let Some(inner_map_2) = immunogenicity_dict_2.get(self_params) {
             // Initialize the inner map for the AUC values
             let mut computed_values_map: HashMap<String, f64> = HashMap::new();
             
             // Iterate over the inner map of the first dictionary
-            for (self_params, vector_1) in inner_map_1.iter() {
+            for (foreign_params, vector_1) in inner_map_1.iter() {
                 // Check if the second inner map contains the same self_params
-                if let Some(vector_2) = inner_map_2.get(self_params) {
+                if let Some(vector_2) = inner_map_2.get(foreign_params) {
                     // Calculate AUC and insert into the inner map
                     if let Ok(auc_value) = calculate_auc(vector_1, vector_2) {
-                        computed_values_map.insert(self_params.to_string(), auc_value);
+                        computed_values_map.insert(foreign_params.to_string(), auc_value);
                     }
                 }
             }
 
             // Insert the inner map into the AUC dictionary
-            auc_dict.insert(foreign_params.to_string(), computed_values_map);
+            auc_dict.insert(self_params.to_string(), computed_values_map);
         }
     }
 
     Ok(auc_dict)
 }
-// pub fn calculate_auc_dict_from_pickle_files_rs(
-//     file_paths_list1: Vec<&str>,
-//     file_paths_list2: Vec<&str>,
-// ) -> Result<HashMap<String, HashMap<String, f64>>, Box<dyn Error>> {
-//     /*
-//     PARALLEL VERSION
-//     Compute auc_dict[foreign_params][self_params]
-//      */
-
-//     // Call immunogenicity_dict_from_pickle_files_rs for both lists
-//     let immunogenicity_dict_1 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list1)?;
-//     let immunogenicity_dict_2 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list2)?;
-
-//     // Parallelize the loop using rayon
-//     let auc_dict: HashMap<String, HashMap<String, f64>> = immunogenicity_dict_1
-//         .par_iter()
-//         .filter_map(|(foreign_params, inner_map_1)| {
-//             immunogenicity_dict_2.get(foreign_params).map(|inner_map_2| {
-//                 let computed_values_map: HashMap<String, f64> = inner_map_1
-//                     .iter()
-//                     .filter_map(|(self_params, vector_1)| {
-//                         inner_map_2.get(self_params).and_then(|vector_2| {
-//                             calculate_auc(vector_1, vector_2).ok()
-//                         })
-//                         .map(|n| (self_params.to_string(), n))
-//                     })
-//                     .collect();
-//                 (foreign_params.to_string(), computed_values_map)
-//             })
-//         })
-//         .collect();
-
-//     Ok(auc_dict)
-// }
-
-

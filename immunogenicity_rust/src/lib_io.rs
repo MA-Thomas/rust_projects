@@ -231,6 +231,10 @@ pub fn load_epitopes_kds_from_tar_gz(csv_kds_file_path: &str) -> Result<Vec<Targ
 
 #[derive(Deserialize, Clone)]
 pub struct PickleContents {
+    // keys for logCh_dict: [self_params]
+    // keys for log_rho_multi_query_dict: [epitope][self_params][foreign_params]
+    // keys for logKInv_entropy_self_dict: [epitope][self_params]
+    // keys for IEDB dicts: [epitope][foreign_params]
     pub logKInv_entropy_self_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
     pub logCh_dict: HashMap<String, Option<f64>>,
     pub logKInv_entropy_Koncz_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
@@ -240,7 +244,60 @@ pub struct PickleContents {
     pub log_rho_multi_query_dict: HashMap<String, HashMap<String, HashMap<String, Option<f64>> > >,
 }
 
-pub fn load_epi_hla_pkl_file(pkl_file_path: &str) -> Result<PickleContents, Box<dyn Error>> {
+
+pub fn filter_dict_for_inner_key(
+    dict: &HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    keys: &[&str],
+) -> HashMap<String, HashMap<String, Option<(f64, f64)>>> {
+    dict.iter()
+        .filter_map(|(outer_key, inner)| {
+            let filtered_inner: HashMap<String, Option<(f64, f64)>> = inner
+                .iter()
+                .filter_map(|(inner_key, value)| {
+                    if keys.contains(&inner_key.as_str()) {
+                        Some((inner_key.clone(), value.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            
+            if filtered_inner.is_empty() {
+                None
+            } else {
+                Some((outer_key.clone(), filtered_inner))
+            }
+        })
+        .collect()
+}
+pub fn filter_dict_for_middle_key(
+    dict: &HashMap<String, HashMap<String, HashMap<String, Option<f64>>>>,
+    keys: &[&str],
+) -> HashMap<String, HashMap<String, HashMap<String, Option<f64>>>> {
+    dict.iter()
+        .map(|(outer_key, middle_map)| {
+            let filtered_middle_map: HashMap<String, HashMap<String, Option<f64>>> = middle_map
+                .iter()
+                .filter_map(|(middle_key, inner_map)| {
+                    if keys.contains(&middle_key.as_str()) {
+                        Some((middle_key.clone(), inner_map.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            (outer_key.clone(), filtered_middle_map)
+        })
+        .filter(|(_, filtered_middle_map)| !filtered_middle_map.is_empty())
+        .collect()
+}
+
+pub fn load_epi_hla_pkl_file(pkl_file_path: &str, filter_on_self_param_keys: Option<&[&str]>) -> Result<PickleContents, Box<dyn Error>> {
+    /*
+    If filter_on_self_param_keys is &str, only filter the hashmap data in the .pkl corresponding to the provided outer key.
+    (Except for logCh_dict which is only defined at inner_keys (i.e., only at self parameter sets))
+     */
     // Open the file
     let mut file = File::open(pkl_file_path)?;
     
@@ -250,16 +307,27 @@ pub fn load_epi_hla_pkl_file(pkl_file_path: &str) -> Result<PickleContents, Box<
 
     // Deserialize the data
     // let outputs: PickleContents = from_reader(&buffer[..])?;
-    let outputs: PickleContents = from_reader(&buffer[..], Default::default())?;
+    let mut outputs: PickleContents = from_reader(&buffer[..], Default::default())?;
+
+    if let Some(self_param_keys) = filter_on_self_param_keys {
+
+        // Filter the dictionaries by the specified key (self param set)
+        outputs.logKInv_entropy_self_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_self_dict, self_param_keys);
+        // outputs.logKInv_entropy_Koncz_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Koncz_imm_epi_dict, -);
+        // outputs.logKInv_entropy_Koncz_non_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Koncz_non_imm_epi_dict, -);
+        // outputs.logKInv_entropy_Ours_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Ours_imm_epi_dict, -);
+        // outputs.logKInv_entropy_Ours_non_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Ours_non_imm_epi_dict, -);
+        outputs.log_rho_multi_query_dict = filter_dict_for_middle_key(&outputs.log_rho_multi_query_dict, self_param_keys);
+    }
 
     Ok(outputs)
 }
 
-pub fn load_all_pkl_files(file_paths: &[&str]) -> Result<Vec<PickleContents>, Box<dyn Error>> {
+pub fn load_all_pkl_files(file_paths: &[&str], filter_on_self_param_keys: Option<&[&str]>) -> Result<Vec<PickleContents>, Box<dyn Error>> {
     let pickle_contents_vec: Arc<Mutex<Vec<PickleContents>>> = Arc::new(Mutex::new(Vec::new()));
 
     file_paths.par_iter().for_each(|&file_path| {
-        match load_epi_hla_pkl_file(file_path) {
+        match load_epi_hla_pkl_file(file_path, filter_on_self_param_keys) {
             Ok(contents) => {
                 let mut vec = pickle_contents_vec.lock().unwrap();
                 vec.push(contents);

@@ -40,11 +40,10 @@ mod lib_math_functions;
 use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, 
     load_epitopes_distances_from_tar_gz, load_epitopes_kds_from_tar_gz, 
     set_json_path, evaluate_context}; 
-use lib_rust_function_versions::{compute_gamma_d_coeff_rs, 
-    process_distance_info_vec_rs, process_kd_info_vec_rs, 
-    compute_logKinv_and_entropy_dict_rs, compute_logCh_dict_rs, 
-    compute_log_non_rho_terms_multi_query_single_hla_rs, compute_log_rho_multi_query_rs,
-    immunogenicity_dict_from_pickle_files_rs, calculate_auc_dict_from_pickle_files_rs};
+use lib_rust_function_versions::{calculate_auc_dict_from_pickle_files_rs, calculate_auc_dict_iteratively_from_pickle_files_rs, 
+    compute_gamma_d_coeff_rs, compute_logCh_dict_rs, compute_logKinv_and_entropy_dict_rs, 
+    compute_log_non_rho_terms_multi_query_single_hla_rs, compute_log_rho_multi_query_rs, 
+    immunogenicity_dict_from_pickle_files_rs, process_distance_info_vec_rs, process_kd_info_vec_rs};
 use lib_data_structures_auxiliary_functions::{DistanceMetricContext, DistanceMetricType, TargetEpiDistances, 
     have_same_keys, print_keys_diff, convert_nested_PyDict_to_HashMap};
 use lib_math_functions::{CalculationError};
@@ -245,14 +244,15 @@ struct Params {
 fn get_immunogenicity_dicts_py(
     file_paths_list1: Vec<&str>,
     file_paths_list2: Vec<&str> ) -> PyResult<(HashMap<String, HashMap<String, Vec<f64>>>, HashMap<String, HashMap<String, Vec<f64>>>)> {
-    // Call the existing function with the first list of file paths
-    let dict1 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list1) {
+    
+    // Call the existing function with the first list of file paths (None argument means don't filter on specific outer_key, i.e., foreign paramset)
+    let dict1 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, None) {
         Ok(dict) => dict,
         Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),
     };
 
     // Call the existing function with the second list of file paths
-    let dict2 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list2) {
+    let dict2 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list2, None) {
         Ok(dict) => dict,
         Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),
     };
@@ -265,12 +265,13 @@ fn get_immunogenicity_dicts_py(
 pub fn calculate_auc_dict_from_pickle_files_py(
     file_paths_list1: Vec<&str>,
     file_paths_list2: Vec<&str>,
+    num_self_params_per_iter: usize,
 ) -> PyResult<HashMap<String, HashMap<String, f64>>> {
 
     // Pos assay epi-hla pkl files: file_paths_list1
     // Neg assay epi-hla pkl files: file_paths_list2
-    let auc_dict_result = calculate_auc_dict_from_pickle_files_rs(file_paths_list1, file_paths_list2);
-    
+    // let auc_dict_result = calculate_auc_dict_from_pickle_files_rs(file_paths_list1, file_paths_list2);
+    let auc_dict_result = calculate_auc_dict_iteratively_from_pickle_files_rs(file_paths_list1, file_paths_list2,num_self_params_per_iter);
     match auc_dict_result {
         Ok(auc_dict) => Ok(auc_dict),
         Err(err) => Err(PyRuntimeError::new_err(err.to_string())), // Convert the error to a PyRuntimeError
