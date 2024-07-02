@@ -9,6 +9,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::exceptions::PyRuntimeError;
 
+use std::str::FromStr;
+use std::fmt;
+
 #[derive(Debug, serde::Deserialize)]
 pub struct JSONData {
     // If fields may or may not appear in the json (e.g., epidist_blosum62_distance vs all_tcr_all_combos_model), use the Option<> type.
@@ -187,6 +190,30 @@ pub struct TargetEpiKds {
     pub Kd: f64,
 }
 
+
+pub enum ImmunogenicityValue {
+    Scalar(f64),
+    Vector(Vec<f64>),
+}
+// Implement AsMut for ImmunogenicityValue to allow conversion to &mut Vec<f64>
+impl AsMut<Vec<f64>> for ImmunogenicityValue {
+    fn as_mut(&mut self) -> &mut Vec<f64> {
+        match self {
+            ImmunogenicityValue::Scalar(_) => {
+                *self = ImmunogenicityValue::Vector(Vec::new()); // Convert Scalar to Vector if needed
+                if let ImmunogenicityValue::Vector(ref mut vec) = self {
+                    vec
+                } else {
+                    unreachable!(); // This should never happen due to the above match arm
+                }
+            }
+            ImmunogenicityValue::Vector(ref mut vec) => vec,
+        }
+    }
+}
+
+
+
 pub fn tuple_to_string(tuple: &(f64, f64)) -> String {
     format!("{:?}", tuple)
 }
@@ -257,4 +284,42 @@ pub fn convert_nested_PyDict_to_HashMap(dict: &PyDict) -> PyResult<HashMap<Strin
     }
 
     Ok(result_hashm)
+}
+
+#[derive(Debug)]
+pub enum CalculationError {
+    InvalidInput,
+    RocCurveError,
+    PrCurveError,
+    InvalidAucType,
+}
+// Implement the Error trait for CalculationError
+impl fmt::Display for CalculationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            CalculationError::InvalidInput => write!(f, "Invalid input error occurred"),
+            CalculationError::RocCurveError => write!(f, "ROC curve calculation error"),
+            CalculationError::PrCurveError => write!(f, "Precision-recall curve calculation error"),
+            CalculationError::InvalidAucType => write!(f, "Invalid AUC type specified"),
+        }
+    }
+}
+// Implementing the Error trait allows CalculationError to be used as a Box<dyn Error>
+impl Error for CalculationError {}
+
+
+pub enum AucType {
+    ROC,
+    PR,
+}
+impl FromStr for AucType {
+    type Err = CalculationError;
+
+    fn from_str(input: &str) -> Result<AucType, Self::Err> {
+        match input.to_uppercase().as_str() {
+            "ROC" => Ok(AucType::ROC),
+            "PR" => Ok(AucType::PR),
+            _ => Err(CalculationError::InvalidAucType),
+        }
+    }
 }

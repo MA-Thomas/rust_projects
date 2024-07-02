@@ -40,13 +40,13 @@ mod lib_math_functions;
 use lib_io::{parse_fasta, save_epitopes_distances_to_tar_gz, 
     load_epitopes_distances_from_tar_gz, load_epitopes_kds_from_tar_gz, 
     set_json_path, evaluate_context}; 
-use lib_rust_function_versions::{calculate_auc_dict_from_pickle_files_rs, calculate_auc_dict_iteratively_from_pickle_files_rs, 
+use lib_rust_function_versions::{calculate_auc_dict_iteratively_from_pickle_files_rs, 
     compute_gamma_d_coeff_rs, compute_logCh_dict_rs, compute_logKinv_and_entropy_dict_rs, 
     compute_log_non_rho_terms_multi_query_single_hla_rs, compute_log_rho_multi_query_rs, 
-    immunogenicity_dict_from_pickle_files_rs, process_distance_info_vec_rs, process_kd_info_vec_rs};
-use lib_data_structures_auxiliary_functions::{DistanceMetricContext, DistanceMetricType, TargetEpiDistances, 
+    immunogenicity_dict_from_pickle_files_rs, immunogenicity_dict_for_auc_from_pickle_files_rs, process_distance_info_vec_rs, process_kd_info_vec_rs};
+use lib_data_structures_auxiliary_functions::{DistanceMetricContext, DistanceMetricType, TargetEpiDistances,CalculationError, 
     have_same_keys, print_keys_diff, convert_nested_PyDict_to_HashMap};
-use lib_math_functions::{CalculationError};
+// use lib_math_functions::{};
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
@@ -241,18 +241,62 @@ struct Params {
     foreign_params: String,
 }
 #[pyfunction]
-fn get_immunogenicity_dicts_py(
+fn get_immunogenicity_dict_py(
     file_paths_list1: Vec<&str>,
-    file_paths_list2: Vec<&str> ) -> PyResult<(HashMap<String, HashMap<String, Vec<f64>>>, HashMap<String, HashMap<String, Vec<f64>>>)> {
-    
+    query_presentation_tuples1: Option<Vec<(&str, f64)>>,
+ ) -> PyResult<HashMap<(String,String),HashMap<String, HashMap<String, Vec<f64>>>>> {
+
+    /*
+    This function takes an optional arguments: query_presentation_tuples1.
+    This provides the query epitope presentation factors (e.g., 1/Kd(query_epi,hla)) a vectors of tuples.
+     */
+
+     // Convert the tuples vectors - if they exist - into Option<HashMap<String, f64>>
+    let query_presentation_factor_map1: Option<HashMap<String, f64>> = query_presentation_tuples1.map(|tuples| {
+        tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
+    });
+
+
+    // Call the existing function with the first list of file paths (None argument means don't filter on specific outer_key)
+    let dict1 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, None, query_presentation_factor_map1.as_ref()) {
+        Ok(dict) => dict,
+        Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),
+    };
+
+    // Return the dictionary
+    Ok(dict1)
+}
+
+#[pyfunction]
+fn get_immunogenicity_dicts_for_auc_py(
+    file_paths_list1: Vec<&str>,
+    file_paths_list2: Vec<&str>,
+    query_presentation_tuples1: Option<Vec<(&str, f64)>>,
+    query_presentation_tuples2: Option<Vec<(&str, f64)>>,
+ ) -> PyResult<(HashMap<String, HashMap<String, Vec<f64>>>, HashMap<String, HashMap<String, Vec<f64>>>)> {
+
+    /*
+    This function takes two optional arguments: query_presentation_tuples1 and query_presentation_tuples2.
+    These provide the query epitope presentation factors (e.g., 1/Kd(query_epi,hla)) a vectors of tuples.
+     */
+
+     // Convert the tuples vectors - if they exist - into Option<HashMap<String, f64>>
+    let query_presentation_factor_map1: Option<HashMap<String, f64>> = query_presentation_tuples1.map(|tuples| {
+        tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
+    });
+    let query_presentation_factor_map2: Option<HashMap<String, f64>> = query_presentation_tuples2.map(|tuples| {
+        tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
+    });
+
+        
     // Call the existing function with the first list of file paths (None argument means don't filter on specific outer_key, i.e., foreign paramset)
-    let dict1 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, None) {
+    let dict1 = match immunogenicity_dict_for_auc_from_pickle_files_rs(&file_paths_list1, None, query_presentation_factor_map1.as_ref()) {
         Ok(dict) => dict,
         Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),
     };
 
     // Call the existing function with the second list of file paths
-    let dict2 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list2, None) {
+    let dict2 = match immunogenicity_dict_for_auc_from_pickle_files_rs(&file_paths_list2, None, query_presentation_factor_map2.as_ref()) {
         Ok(dict) => dict,
         Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),
     };
@@ -261,17 +305,20 @@ fn get_immunogenicity_dicts_py(
     Ok((dict1, dict2))
 }
 
+
 #[pyfunction]
 pub fn calculate_auc_dict_from_pickle_files_py(
     file_paths_list1: Vec<&str>,
     file_paths_list2: Vec<&str>,
     num_self_params_per_iter: usize,
+    auc_type_str: &str,
+    query_presentation_tuples1: Option<Vec<(&str, f64)>>,
+    query_presentation_tuples2: Option<Vec<(&str, f64)>>,
 ) -> PyResult<HashMap<String, HashMap<String, f64>>> {
 
     // Pos assay epi-hla pkl files: file_paths_list1
     // Neg assay epi-hla pkl files: file_paths_list2
-    // let auc_dict_result = calculate_auc_dict_from_pickle_files_rs(file_paths_list1, file_paths_list2);
-    let auc_dict_result = calculate_auc_dict_iteratively_from_pickle_files_rs(file_paths_list1, file_paths_list2,num_self_params_per_iter);
+    let auc_dict_result = calculate_auc_dict_iteratively_from_pickle_files_rs(file_paths_list1, file_paths_list2,num_self_params_per_iter, auc_type_str, query_presentation_tuples1, query_presentation_tuples2);
     match auc_dict_result {
         Ok(auc_dict) => Ok(auc_dict),
         Err(err) => Err(PyRuntimeError::new_err(err.to_string())), // Convert the error to a PyRuntimeError
@@ -306,7 +353,8 @@ fn immunogenicity_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_log_non_rho_terms_multi_query_single_hla_py, m)?)?;
     m.add_function(wrap_pyfunction!(compute_log_rho_multi_query_py, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_auc_dict_from_pickle_files_py, m)?)?;
-    m.add_function(wrap_pyfunction!(get_immunogenicity_dicts_py, m)?)?;
+    m.add_function(wrap_pyfunction!(get_immunogenicity_dict_py, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_auc_py, m)?)?;
+    m.add_function(wrap_pyfunction!(get_immunogenicity_dicts_for_auc_py, m)?)?;
     Ok(())
 }

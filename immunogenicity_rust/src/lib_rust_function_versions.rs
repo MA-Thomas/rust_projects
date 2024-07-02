@@ -11,7 +11,7 @@ use std::fmt;
 /////////////////////////////////////////////////////////////////////////
 ////////////   Import from other scripts via the main module.   //////////////
 use crate::*; // Import from the main module (lib.rs)
-use crate::lib_data_structures_auxiliary_functions::{DistanceMetricType, DistanceMetricContext, TargetEpiDistances, tuple_to_string, generate_variants};
+use crate::lib_data_structures_auxiliary_functions::{DistanceMetricType, DistanceMetricContext, TargetEpiDistances, ImmunogenicityValue, AucType, tuple_to_string, generate_variants};
 use lib_io::{PickleContents, set_json_path, evaluate_context, load_epi_hla_pkl_file, load_all_pkl_files};
 use lib_math_functions::{EntropyError, log_sum, compute_entropy, calculate_auc};
 /////////////////////////////////////////////////////////////////////////
@@ -319,7 +319,7 @@ pub fn compute_logKinv_and_entropy_dict_rs(
                 .par_iter()
                 .map(move |&gamma_logKd_value| {
                     // Compute individual components
-                    let comp1 = -gamma_d_value * epi_dist_array_masked * gamma_d_coeff;
+                    let comp1 = - gamma_d_value * epi_dist_array_masked * gamma_d_coeff;
                     let comp2 = - gamma_logKd_value * epi_log_kd_array_masked;
                     let comp3 = epi_log_count_array_masked;
                     let comp4 = epi_log_conc_array_masked;
@@ -439,7 +439,6 @@ pub fn compute_logCh_dict_rs(
 }
 
 
-//TODO: add a rust-python wrapper function to lib.rs that calls this!
 pub fn compute_log_non_rho_terms_multi_query_single_hla_rs(
     query_epi_list: Vec<&str>,
     dist_file_info: Vec<(&str, bool, &str)>,
@@ -795,8 +794,17 @@ impl fmt::Display for MyError {
     }
 }
 pub fn immunogenicity_dict_from_pickle_files_rs(
-    file_paths: &[&str], filter_on_self_param_keys: Option<&[&str]>,
-) -> Result<HashMap<String, HashMap<String, Vec<f64>>>, Box<dyn StdError>> {
+    file_paths: &[&str], 
+    filter_on_self_param_keys: Option<&[&str]>,
+    query_presentation_factor_map: Option<&HashMap<String, f64>>) -> Result<HashMap<(String,String),HashMap<String, HashMap<String, Vec<f64>>>>, Box<dyn StdError>> {
+    
+    /*
+    immunogenicity_dict_for_auc_from_pickle_files_rs returns a hashmap with structure: [self_params][foreign_params] = nb vector over assay epitopes
+    immunogenicity_dict_from_pickle_files_rs returns a hashmap with structure: [full_query_hla_tuple][self_params][foreign_params] = nb value (or values for 9mers derived from full query epi)
+    
+    Both contain the same content, but one is more useful for efficiently computing the AUC.
+     */
+
     // Load pickle files
     let start_time = std::time::Instant::now();
     let pickle_contents_vec = load_all_pkl_files(file_paths, filter_on_self_param_keys)?;
@@ -804,24 +812,33 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
     // let elapsed_time = (end_time - start_time).as_secs_f64();
     // println!("Elapsed time for load_all_pkl_files(): {:.6} seconds", elapsed_time);
 
-    // Initialize the result dictionary
-    // keys: [self_params][foreign_params]
-    let mut immunogenicity_dict: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
+    // Each PickleContents struct corresponds to a single long query epi-hla pair.
+    // There may be multiple associated query 9mers associated with the long query epi.
+    // A question arises, should we only store in the immunogenicity_dict the best (highest) nb values for each long query or all of them.
+    let keep_only_best_imm_per_long_query = true;
 
-    // Parallel processing for each PickleContents
-    let result: Vec<HashMap<String, HashMap<String, Vec<f64>>>> = pickle_contents_vec
+    // Initialize the result dictionary
+    // keys: [full_query_epi_hla][self_params][foreign_params]
+    let mut immunogenicity_dict: HashMap<(String,String),HashMap<String, HashMap<String, Vec<f64>>>> = HashMap::new();
+    let mut full_query_epitope_hla_list_ordered: Vec<(String,String)> = Vec::new(); 
+
+    // Parallel processing for each PickleContents. 
+    let result: Vec<(HashMap<String, HashMap<String, ImmunogenicityValue>>, (&str,&str))> = pickle_contents_vec
         .par_iter()
         .map(|pickle_contents| {
             let PickleContents {
                 logKInv_entropy_self_dict,
                 logCh_dict,
                 log_rho_multi_query_dict,
+                full_query_epitope,
+                query_allele,
                 ..
             } = pickle_contents;
 
             // Local result dictionary for this thread
             // keys: [self_params][foreign_params]
-            let mut local_immunogenicity_dict: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
+            let mut local_immunogenicity_dict: HashMap<String, HashMap<String, ImmunogenicityValue>> = HashMap::new();
+            let mut full_query_epitope_hla_from_pickle = (full_query_epitope.as_str(),query_allele.as_str()) ;
 
             // Cache logCh_dict lookups
             let mut logCh_cache = HashMap::new();
@@ -829,6 +846,9 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
             // Process each entry in log_rho_multi_query_dict
             // log_rho_multi_query_dict keys: [epitope][self_params][foreign_params]
             for (query_epi, log_rho_dict) in log_rho_multi_query_dict {
+                
+
+
                 for (self_params, foreign_params_dict) in log_rho_dict {
                     let gamma_logKd_str = get_nth_element(&self_params, 1);
 
@@ -855,14 +875,41 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
 
                                 for (foreign_params, log_rho_opt) in foreign_params_dict {
                                     if let Some(log_rho) = log_rho_opt {
-                                        let nb = (log_non_rho + log_rho).exp();
+                                        let mut nb = (log_non_rho + log_rho).exp();
 
-                                        local_immunogenicity_dict
-                                            .entry(self_params.clone())
-                                            .or_insert_with(HashMap::new)
-                                            .entry(foreign_params.clone())
-                                            .or_insert_with(Vec::new)
-                                            .push(nb);
+                                        // Multiply by query_presentation_factor if the map is provided and contains the key
+                                        if let Some(query_presentation_factor_map) = query_presentation_factor_map {
+                                            if let Some(query_presentation_factor) = query_presentation_factor_map.get(query_epi) {
+                                                nb *= query_presentation_factor;
+                                            }
+                                        }
+                                        
+                                        if keep_only_best_imm_per_long_query {
+                                            let entry = local_immunogenicity_dict
+                                                .entry(self_params.clone())
+                                                .or_insert_with(|| HashMap::new())
+                                                .entry(foreign_params.clone())
+                                                .or_insert_with(|| ImmunogenicityValue::Scalar(0.0));
+                                
+                                            match entry {
+                                                ImmunogenicityValue::Scalar(current_nb_value) => {
+                                                    if nb > *current_nb_value {
+                                                        *entry = ImmunogenicityValue::Scalar(nb);
+                                                    }
+                                                }
+                                                _ => unreachable!(),
+                                            }
+                                        } else {
+                                            let entry = local_immunogenicity_dict
+                                                .entry(self_params.clone())
+                                                .or_insert_with(|| HashMap::new())
+                                                .entry(foreign_params.clone())
+                                                .or_insert_with(|| ImmunogenicityValue::Vector(Vec::new()));
+                                
+                                            if let ImmunogenicityValue::Vector(vec) = entry {
+                                                vec.push(nb);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -879,27 +926,199 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
                 }
             }
 
-            local_immunogenicity_dict // Return local results
+            (local_immunogenicity_dict, full_query_epitope_hla_from_pickle) // Return local results
         })
         .collect(); // Collect results from all threads
 
-    // Merge results from all threads into the main immunogenicity_dict
-    for thread_result in result {
+    for (thread_result, full_query_epitope_hla_from_pickle) in result {
+        let owned_string_tuple: (String, String) = (full_query_epitope_hla_from_pickle.0.to_owned(), full_query_epitope_hla_from_pickle.1.to_owned());
+
         for (self_params, foreign_params_map) in thread_result {
-            for (foreign_params, nb_vec) in foreign_params_map {
+            for (foreign_params, immunogenicity_value) in foreign_params_map {
+                let nb_vec = match immunogenicity_value {
+                    ImmunogenicityValue::Scalar(nb) => vec![nb],
+                    ImmunogenicityValue::Vector(vec) => vec,
+                };
+
                 immunogenicity_dict
-                    .entry(self_params.clone())
-                    .or_insert_with(HashMap::new)
-                    .entry(foreign_params.clone())
-                    .or_insert_with(Vec::new)
-                    .extend(nb_vec);
+                .entry(owned_string_tuple.clone())
+                .or_insert_with(HashMap::new)
+                .entry(self_params.clone())
+                .or_insert_with(HashMap::new)
+                .entry(foreign_params.clone())
+                .or_insert(nb_vec);
+
             }
         }
+        
+        full_query_epitope_hla_list_ordered.push(owned_string_tuple);
+    }
+
+    Ok((immunogenicity_dict))
+}
+
+pub fn immunogenicity_dict_for_auc_from_pickle_files_rs(
+    file_paths: &[&str], 
+    filter_on_self_param_keys: Option<&[&str]>,
+    query_presentation_factor_map: Option<&HashMap<String, f64>>) -> Result<(HashMap<String, HashMap<String, Vec<f64>>>), Box<dyn StdError>> {
+    
+    /*
+    immunogenicity_dict_for_auc_from_pickle_files_rs returns a hashmap with structure: [self_params][foreign_params] = nb vector over assay epitopes
+    immunogenicity_dict_from_pickle_files_rs returns a hashmap with structure: [full_query_hla_tuple][self_params][foreign_params] = nb value (or values for 9mers derived from full query epi)
+     
+    Both contain the same content, but one is more useful for efficiently computing the AUC.
+     */
+
+    // Load pickle files
+    let start_time = std::time::Instant::now();
+    let pickle_contents_vec = load_all_pkl_files(file_paths, filter_on_self_param_keys)?;
+    // let end_time = std::time::Instant::now();
+    // let elapsed_time = (end_time - start_time).as_secs_f64();
+    // println!("Elapsed time for load_all_pkl_files(): {:.6} seconds", elapsed_time);
+
+    // Each PickleContents struct corresponds to a single long query epi-hla pair.
+    // There may be multiple associated query 9mers associated with the long query epi.
+    // A question arises, should we only store in the immunogenicity_dict the best (highest) nb values for each long query or all of them.
+    let keep_only_best_imm_per_long_query = true;
+
+    // Initialize the result dictionary
+    // keys: [full_query_epi_hla][self_params][foreign_params]
+    let mut immunogenicity_dict: HashMap<String, HashMap<String, Vec<f64>>> = HashMap::new();
+    let mut full_query_epitope_hla_list_ordered: Vec<(String,String)> = Vec::new(); 
+
+    // Parallel processing for each PickleContents. 
+    let result: Vec<(HashMap<String, HashMap<String, ImmunogenicityValue>>, (&str,&str))> = pickle_contents_vec
+        .par_iter()
+        .map(|pickle_contents| {
+            let PickleContents {
+                logKInv_entropy_self_dict,
+                logCh_dict,
+                log_rho_multi_query_dict,
+                full_query_epitope,
+                query_allele,
+                ..
+            } = pickle_contents;
+
+            // Local result dictionary for this thread
+            // keys: [self_params][foreign_params]
+            let mut local_immunogenicity_dict: HashMap<String, HashMap<String, ImmunogenicityValue>> = HashMap::new();
+            let mut full_query_epitope_hla_from_pickle = (full_query_epitope.as_str(),query_allele.as_str()) ;
+
+            // Cache logCh_dict lookups
+            let mut logCh_cache = HashMap::new();
+
+            // Process each entry in log_rho_multi_query_dict
+            // log_rho_multi_query_dict keys: [epitope][self_params][foreign_params]
+            for (query_epi, log_rho_dict) in log_rho_multi_query_dict {
+                
+
+
+                for (self_params, foreign_params_dict) in log_rho_dict {
+                    let gamma_logKd_str = get_nth_element(&self_params, 1);
+
+                    // Generate variants of the key
+                    let variants = generate_variants(&gamma_logKd_str);
+
+                    // Attempt to find a matching entry in logCh_dict, cache the result
+                    let log_Ch = logCh_cache
+                        .entry(gamma_logKd_str.clone())
+                        .or_insert_with(|| {
+                            variants
+                                .iter()
+                                .filter_map(|variant| logCh_dict.get(variant).and_then(|&val| val))
+                                .next()
+                        });
+
+                    // Handle the result of the lookup
+                    if let Some(log_Ch) = log_Ch {
+                        if let Some(inner_map) = logKInv_entropy_self_dict.get(query_epi.as_str()) {
+                            if let Some(Some((K_Inverse_self, Entropy_self))) =
+                                inner_map.get(self_params.as_str())
+                            {
+                                let log_non_rho = *log_Ch + K_Inverse_self - Entropy_self;
+
+                                for (foreign_params, log_rho_opt) in foreign_params_dict {
+                                    if let Some(log_rho) = log_rho_opt {
+                                        let mut nb = (log_non_rho + log_rho).exp();
+
+                                        // Multiply by query_presentation_factor if the map is provided and contains the key
+                                        if let Some(query_presentation_factor_map) = query_presentation_factor_map {
+                                            if let Some(query_presentation_factor) = query_presentation_factor_map.get(query_epi) {
+                                                nb *= query_presentation_factor;
+                                            }
+                                        }
+                                        
+                                        if keep_only_best_imm_per_long_query {
+                                            let entry = local_immunogenicity_dict
+                                                .entry(self_params.clone())
+                                                .or_insert_with(|| HashMap::new())
+                                                .entry(foreign_params.clone())
+                                                .or_insert_with(|| ImmunogenicityValue::Scalar(0.0));
+                                
+                                            match entry {
+                                                ImmunogenicityValue::Scalar(current_nb_value) => {
+                                                    if nb > *current_nb_value {
+                                                        *entry = ImmunogenicityValue::Scalar(nb);
+                                                    }
+                                                }
+                                                _ => unreachable!(),
+                                            }
+                                        } else {
+                                            let entry = local_immunogenicity_dict
+                                                .entry(self_params.clone())
+                                                .or_insert_with(|| HashMap::new())
+                                                .entry(foreign_params.clone())
+                                                .or_insert_with(|| ImmunogenicityValue::Vector(Vec::new()));
+                                
+                                            if let ImmunogenicityValue::Vector(vec) = entry {
+                                                vec.push(nb);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Create a formatted list of variants for the error message
+                        let variant_strings: Vec<&str> =
+                            variants.iter().map(|s| s.as_str()).collect();
+                        panic!(
+                            "None of the key variants {:?} found in logCh_dict",
+                            &variant_strings
+                        );
+                    }
+                }
+            }
+
+            (local_immunogenicity_dict, full_query_epitope_hla_from_pickle) // Return local results
+        })
+        .collect(); // Collect results from all threads
+
+    for (thread_result, full_query_epitope_hla_from_pickle) in result {
+        let owned_string_tuple: (String, String) = (full_query_epitope_hla_from_pickle.0.to_owned(), full_query_epitope_hla_from_pickle.1.to_owned());
+
+        for (self_params, foreign_params_map) in thread_result {
+            for (foreign_params, immunogenicity_value) in foreign_params_map {
+                let nb_vec = match immunogenicity_value {
+                    ImmunogenicityValue::Scalar(nb) => vec![nb],
+                    ImmunogenicityValue::Vector(vec) => vec,
+                };
+
+                immunogenicity_dict
+                .entry(self_params.clone())
+                .or_insert_with(HashMap::new)
+                .entry(foreign_params.clone())
+                .or_insert_with(Vec::new)
+                .extend(nb_vec);
+
+            }
+        }
+        
+        full_query_epitope_hla_list_ordered.push(owned_string_tuple);
     }
 
     Ok(immunogenicity_dict)
 }
-
 
 fn partition_keys(self_param_keys_1: &HashSet<String>, n: usize) -> Vec<Vec<&str>> {
     // Convert the HashSet to a Vec for easier indexing
@@ -919,11 +1138,29 @@ pub fn calculate_auc_dict_iteratively_from_pickle_files_rs(
     file_paths_list1: Vec<&str>,
     file_paths_list2: Vec<&str>,
     num_self_params_per_iter: usize,
-) -> Result<HashMap<String, HashMap<String, f64>>, Box<dyn Error>> {
+    auc_type_str: &str,
+    query_presentation_tuples1: Option<Vec<(&str, f64)>>,
+    query_presentation_tuples2: Option<Vec<(&str, f64)>>) -> Result<HashMap<String, HashMap<String, f64>>, Box<dyn Error>> {
+
+    /*
+    This function takes two optional arguments: query_presentation_tuples1 and query_presentation_tuples2.
+    These provide the query epitope presentation factors (e.g., 1/Kd(query_epi,hla)) a vectors of tuples.
+     */
     let start_time = std::time::Instant::now(); 
+
+    let auc_type: AucType = auc_type_str.parse()?;
 
     // Initialize the AUC dictionary
     let mut auc_dict: HashMap<String, HashMap<String, f64>> = HashMap::new();
+
+    // Convert the tuples vectors - if they exist - into Option<HashMap<String, f64>>
+    let query_presentation_factor_map1: Option<HashMap<String, f64>> = query_presentation_tuples1.map(|tuples| {
+        tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
+    });
+    let query_presentation_factor_map2: Option<HashMap<String, f64>> = query_presentation_tuples2.map(|tuples| {
+        tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
+    });
+
 
     /*
     non parallel version. 
@@ -933,6 +1170,20 @@ pub fn calculate_auc_dict_iteratively_from_pickle_files_rs(
     We need to first determine the set of all outer keys.
      */
     
+    /*
+    The immunogenicity dict at a particular parameter set (self and foreign) contians a vector of immunogenicity values across 9mers.
+    All contiguous 9mers generated from the query set have an immunogenicity value.
+    When computing AUC values, we assume -for example- that both 9mers associated with a 10mer in the immunogenic assay 
+    (typically, immunogenicity_dict_1) are immunogenic. 
+    This is an assumption. The assay only establishes that the 10mer is immunogenic. But since our model
+    generates immunogenicity values for 9mers only, we need to make this assumption that the ground truth immunogenicity value
+    is known at the 9mer level.
+
+    ALTERNATIVE:
+    We could instead store in the immunogenicity_dict only the most immunogenic 9mer from each long query epitope.
+     */
+
+
     // Collect all outer keys from first .pkl in file_paths_list1
     let mut self_param_keys_1 = HashSet::new();
     if let Some(first_file_path) = file_paths_list1.first() {
@@ -968,8 +1219,8 @@ pub fn calculate_auc_dict_iteratively_from_pickle_files_rs(
         println!("len(self_param_keys_1): {}", self_param_keys_1.len());
         println!("");
         // Call immunogenicity_dict_from_pickle_files_rs for both lists at the current keys (self param sets)
-        let immunogenicity_dict_1 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, key_option)?;
-        let immunogenicity_dict_2 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list2, key_option)?;
+        let immunogenicity_dict_1 = immunogenicity_dict_for_auc_from_pickle_files_rs(&file_paths_list1, key_option, query_presentation_factor_map1.as_ref())?;
+        let immunogenicity_dict_2 = immunogenicity_dict_for_auc_from_pickle_files_rs(&file_paths_list2, key_option, query_presentation_factor_map2.as_ref())?;
 
         // Iterate over the first dictionary
         for (self_params, inner_map_1) in immunogenicity_dict_1.iter() {
@@ -983,7 +1234,7 @@ pub fn calculate_auc_dict_iteratively_from_pickle_files_rs(
                     // Check if the second inner map contains the same self_params
                     if let Some(vector_2) = inner_map_2.get(foreign_params) {
                         // Calculate AUC and insert into the inner map
-                        if let Ok(auc_value) = calculate_auc(vector_1, vector_2) {
+                        if let Ok(auc_value) = calculate_auc(vector_1, vector_2, &auc_type) {
                             computed_values_map.insert(foreign_params.to_string(), auc_value);
                         }
                     }
@@ -1002,42 +1253,3 @@ pub fn calculate_auc_dict_iteratively_from_pickle_files_rs(
     Ok(auc_dict)
 }
 
-pub fn calculate_auc_dict_from_pickle_files_rs(
-    file_paths_list1: Vec<&str>,
-    file_paths_list2: Vec<&str>,
-) -> Result<HashMap<String, HashMap<String, f64>>, Box<dyn Error>> {
-    /*
-    non parallel version
-     */
-    // Call immunogenicity_dict_from_pickle_files_rs for both lists
-    let immunogenicity_dict_1 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, None)?;
-    let immunogenicity_dict_2 = immunogenicity_dict_from_pickle_files_rs(&file_paths_list2, None)?;
-
-    // Initialize the AUC dictionary
-    let mut auc_dict: HashMap<String, HashMap<String, f64>> = HashMap::new();
-
-    // Iterate over the first dictionary
-    for (self_params, inner_map_1) in immunogenicity_dict_1.iter() {
-        // Check if the second dictionary contains the same foreign_params
-        if let Some(inner_map_2) = immunogenicity_dict_2.get(self_params) {
-            // Initialize the inner map for the AUC values
-            let mut computed_values_map: HashMap<String, f64> = HashMap::new();
-            
-            // Iterate over the inner map of the first dictionary
-            for (foreign_params, vector_1) in inner_map_1.iter() {
-                // Check if the second inner map contains the same self_params
-                if let Some(vector_2) = inner_map_2.get(foreign_params) {
-                    // Calculate AUC and insert into the inner map
-                    if let Ok(auc_value) = calculate_auc(vector_1, vector_2) {
-                        computed_values_map.insert(foreign_params.to_string(), auc_value);
-                    }
-                }
-            }
-
-            // Insert the inner map into the AUC dictionary
-            auc_dict.insert(self_params.to_string(), computed_values_map);
-        }
-    }
-
-    Ok(auc_dict)
-}

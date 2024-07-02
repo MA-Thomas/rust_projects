@@ -1,11 +1,27 @@
 use std::f64::consts::E;
 
-#[derive(Debug)]
-pub enum CalculationError {
-    InvalidInput,
-    RocCurveError,
-}
-pub fn calculate_auc(pos: &[f64], neg: &[f64]) -> Result<f64, CalculationError> {
+use crate::*; // Import from the main module (lib.rs)
+use crate::lib_data_structures_auxiliary_functions::{CalculationError, AucType};
+
+// pub fn calculate_auc(pos: &[f64], neg: &[f64]) -> Result<f64, CalculationError> {
+//     // Check if input slices are empty
+//     if pos.is_empty() || neg.is_empty() {
+//         return Err(CalculationError::InvalidInput);
+//     }
+
+//     // Combine positive and negative scores into a single vector of (label, score) pairs
+//     let mut pairs: Vec<(bool, f64)> = pos.iter().map(|&score| (true, score)).collect();
+//     pairs.extend(neg.iter().map(|&score| (false, score)));
+
+//     // Compute ROC AUC score
+//     if let Some(auc) = classifier_measures::roc_auc_mut(&mut pairs) {
+//         Ok(auc)
+//     } else {
+//         Err(CalculationError::RocCurveError)
+//     }
+// }
+
+pub fn calculate_auc(pos: &[f64], neg: &[f64], auc_type: &AucType) -> Result<f64, CalculationError> {
     // Check if input slices are empty
     if pos.is_empty() || neg.is_empty() {
         return Err(CalculationError::InvalidInput);
@@ -15,11 +31,23 @@ pub fn calculate_auc(pos: &[f64], neg: &[f64]) -> Result<f64, CalculationError> 
     let mut pairs: Vec<(bool, f64)> = pos.iter().map(|&score| (true, score)).collect();
     pairs.extend(neg.iter().map(|&score| (false, score)));
 
-    // Compute ROC AUC score
-    if let Some(auc) = classifier_measures::roc_auc_mut(&mut pairs) {
-        Ok(auc)
-    } else {
-        Err(CalculationError::RocCurveError)
+    match auc_type {
+        AucType::ROC => {
+            // Compute ROC AUC score using the same function as in the original code
+            if let Some(auc) = classifier_measures::roc_auc_mut(&mut pairs) {
+                Ok(auc)
+            } else {
+                Err(CalculationError::RocCurveError)
+            }
+        }
+        AucType::PR => {
+            // Compute PR AUC score
+            if let Some(auc) = classifier_measures::pr_auc_mut(&mut pairs) {
+                Ok(auc)
+            } else {
+                Err(CalculationError::PrCurveError)
+            }
+        }
     }
 }
 

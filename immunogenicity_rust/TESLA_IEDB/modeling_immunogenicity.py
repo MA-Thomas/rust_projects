@@ -20,6 +20,19 @@ def create_evenly_spaced_list(L, U, N):
     return np.linspace(L, U, N).tolist()
 def create_log_spaced_list(L, U, N):
     return np.logspace(np.log10(L), np.log10(U), N).tolist()
+def derive_original_peptide(nmer_list):
+    if not nmer_list:
+        return ""
+
+    # Start with the first nmer
+    original_peptide = nmer_list[0]
+
+    # Append the last character of each subsequent nmer to the original_peptide
+    for nmer in nmer_list[1:]:
+        original_peptide += nmer[-1]
+
+    return original_peptide
+
 HLAA = ['HLA-A0101', 'HLA-A0201', 'HLA-A0202', 'HLA-A0203', 'HLA-A0205', 'HLA-A0206', 'HLA-A0207', 'HLA-A0211',
         'HLA-A0212', 'HLA-A0216', 'HLA-A0217', 'HLA-A0219', 'HLA-A0250', 'HLA-A0301', 'HLA-A0302', 'HLA-A0319',
         'HLA-A1101', 'HLA-A2301', 'HLA-A2402', 'HLA-A2403', 'HLA-A2501', 'HLA-A2601', 'HLA-A2602', 'HLA-A2603',
@@ -64,18 +77,14 @@ if __name__ == "__main__":
     
     parser.add_argument("-load_target_hla_epi_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
 
-    parser.add_argument("-allele", default='A0201')
+    parser.add_argument("-allele", default='A0301')
 
-    parser.add_argument("-inclusive_start_ind", default="1807")
+    parser.add_argument("-inclusive_start_ind", default="67")
     parser.add_argument("-inclusive_end_ind", default="2000")
     args = parser.parse_args()
 
 
-    # pos = [0.1, 0.4, 0.35]
-    # neg = [0.32, 0.8, 0.01]
-    # auc = immunogenicity_rust.calculate_auc_py(pos,neg)
-    # print("auc: ", auc)
-    # assert(1==2)
+
     '''
     distance metric types (ninemer) 
     ['all_tcr_all_combos_model',
@@ -162,7 +171,7 @@ if __name__ == "__main__":
         allele = row['allele']
         query_epi_list = row['peptides']
         print(query_epi_list, allele)
-
+        original_query_epitope = derive_original_peptide(query_epi_list)
 
 
         if save_query_distance_files:
@@ -399,9 +408,17 @@ if __name__ == "__main__":
         )
         print("[python] log_rho_dict runtime: ",runtime)
         print("Now saving to .pkl ...")
-        outputs = [logKInv_entropy_self_dict, logCh_dict, logKInv_entropy_Koncz_imm_epi_dict, logKInv_entropy_Koncz_non_imm_epi_dict, 
+        '''
+            NOTE: the terms (logKInv_entropy_Tesla_imm_epi_dict, logKInv_entropy_Tesla_non_imm_epi_dict)
+            do not exist in the .pkl files for A0201, A0301, A1101 because I forgot to add them to this
+            line of code here below.
+        '''
+        outputs = [logKInv_entropy_self_dict, logCh_dict, 
+                   logKInv_entropy_Koncz_imm_epi_dict, logKInv_entropy_Koncz_non_imm_epi_dict, 
                    logKInv_entropy_Ours_imm_epi_dict, logKInv_entropy_Ours_non_imm_epi_dict,
-                   log_rho_dict]
+                   logKInv_entropy_Tesla_imm_epi_dict, logKInv_entropy_Tesla_non_imm_epi_dict,
+                   log_rho_dict,
+                   original_query_epitope, allele]
         
         save_pkl_dir = args.save_pkl_dir + '/d_ub_'+str(d_ub)+'_d_lb_'+str(d_lb)+'/'+allele
         if not os.path.exists(save_pkl_dir):

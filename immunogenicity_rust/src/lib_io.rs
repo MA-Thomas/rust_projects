@@ -14,6 +14,7 @@ use tar::Archive;
 use std::collections::HashMap;
 use serde_pickle::from_reader;
 use serde::Deserialize;
+use serde_pickle::de::{from_slice, DeOptions};
 
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -231,6 +232,8 @@ pub fn load_epitopes_kds_from_tar_gz(csv_kds_file_path: &str) -> Result<Vec<Targ
 
 #[derive(Deserialize, Clone)]
 pub struct PickleContents {
+    // Each PickleContents struct corresponds to a single long query epi-hla pair, i.e., a single .pkl file)
+    // There may be multiple associated query 9mers associated with the long query epi.
     // keys for logCh_dict: [self_params]
     // keys for log_rho_multi_query_dict: [epitope][self_params][foreign_params]
     // keys for logKInv_entropy_self_dict: [epitope][self_params]
@@ -241,7 +244,11 @@ pub struct PickleContents {
     pub logKInv_entropy_Koncz_non_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
     pub logKInv_entropy_Ours_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
     pub logKInv_entropy_Ours_non_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub logKInv_entropy_Tesla_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    pub logKInv_entropy_Tesla_non_imm_epi_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>>,
     pub log_rho_multi_query_dict: HashMap<String, HashMap<String, HashMap<String, Option<f64>> > >,
+    pub full_query_epitope: String,
+    pub query_allele: String,
 }
 
 
@@ -303,22 +310,27 @@ pub fn load_epi_hla_pkl_file(pkl_file_path: &str, filter_on_self_param_keys: Opt
     
     // Read the contents of the file into a buffer
     let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
+    file.read_to_end(&mut buffer).map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Deserialize the data
-    // let outputs: PickleContents = from_reader(&buffer[..])?;
-    let mut outputs: PickleContents = from_reader(&buffer[..], Default::default())?;
-
-    if let Some(self_param_keys) = filter_on_self_param_keys {
-
-        // Filter the dictionaries by the specified key (self param set)
-        outputs.logKInv_entropy_self_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_self_dict, self_param_keys);
-        // outputs.logKInv_entropy_Koncz_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Koncz_imm_epi_dict, -);
-        // outputs.logKInv_entropy_Koncz_non_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Koncz_non_imm_epi_dict, -);
-        // outputs.logKInv_entropy_Ours_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Ours_imm_epi_dict, -);
-        // outputs.logKInv_entropy_Ours_non_imm_epi_dict = filter_dict_for_inner_key(&outputs.logKInv_entropy_Ours_non_imm_epi_dict, -);
-        outputs.log_rho_multi_query_dict = filter_dict_for_middle_key(&outputs.log_rho_multi_query_dict, self_param_keys);
-    }
+    let outputs: PickleContents = from_slice(&buffer, DeOptions::default()).map_err(|e| format!("Failed to deserialize data: {}", e))?;
+    let outputs = if let Some(self_param_keys) = filter_on_self_param_keys {
+        PickleContents {
+            logKInv_entropy_self_dict: filter_dict_for_inner_key(&outputs.logKInv_entropy_self_dict, self_param_keys),
+            logCh_dict: outputs.logCh_dict,
+            logKInv_entropy_Koncz_imm_epi_dict: outputs.logKInv_entropy_Koncz_imm_epi_dict,
+            logKInv_entropy_Koncz_non_imm_epi_dict: outputs.logKInv_entropy_Koncz_non_imm_epi_dict,
+            logKInv_entropy_Ours_imm_epi_dict: outputs.logKInv_entropy_Ours_imm_epi_dict,
+            logKInv_entropy_Ours_non_imm_epi_dict: outputs.logKInv_entropy_Ours_non_imm_epi_dict,
+            logKInv_entropy_Tesla_imm_epi_dict: outputs.logKInv_entropy_Tesla_imm_epi_dict,
+            logKInv_entropy_Tesla_non_imm_epi_dict: outputs.logKInv_entropy_Tesla_non_imm_epi_dict,
+            log_rho_multi_query_dict: filter_dict_for_middle_key(&outputs.log_rho_multi_query_dict, self_param_keys),
+            full_query_epitope: outputs.full_query_epitope,
+            query_allele: outputs.query_allele,
+        }
+    } else {
+        outputs
+    };
 
     Ok(outputs)
 }
