@@ -253,14 +253,14 @@ where
     let only_in_map2: HashSet<_> = keys2.difference(&keys1).collect();
 
     println!("Keys found only in map1 ({}):", only_in_map1.len());
-    // for key in &only_in_map1 {
-    //     println!("{:?}", key);
-    // }
+    for key in &only_in_map1 {
+        println!("{:?}", key);
+    }
 
     println!("Keys found only in map2 ({}):", only_in_map2.len());
-    // for key in &only_in_map2 {
-    //     println!("{:?}", key);
-    // }
+    for key in &only_in_map2 {
+        println!("{:?}", key);
+    }
 }
 
 // Auxiliary function to convert PyDict to HashMap<String, Option<(f64, f64)>>

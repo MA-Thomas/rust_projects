@@ -1,0 +1,16 @@
+#!/bin/bash
+
+echo "In python_rust_caller.lsf"
+
+ml anaconda3
+source /hpc/packages/minerva-centos7/anaconda3/2018.12/etc/profile.d/conda.sh
+conda activate general_3.9
+
+inclusive_start_ind=$1
+inclusive_end_ind=$2
+
+params="-inclusive_start_ind $inclusive_start_ind -inclusive_end_ind $inclusive_end_ind"
+
+cdir=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/immunogenicity_rust/for_CFIT
+
+/hpc/users/thomam32/.conda/envs/general_3.9/bin/python3.9 $cdir/modeling_immunogenicity_CFIT.py $params

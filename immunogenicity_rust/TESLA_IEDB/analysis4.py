@@ -162,6 +162,7 @@ if __name__ == "__main__":
 ###############################################################################
 ##%% COMPUTE IMM_DICT (rust) AND AUC_DICT (python) -> ~40 seconds
 
+    
     rst = time.time()
     auc_dict = {}
     tesla_pos_imm_dict = immunogenicity_rust.get_immunogenicity_dict_py(tesla_pos_pkl_list) 
@@ -174,36 +175,61 @@ if __name__ == "__main__":
     print("Time to generate/load immunogenicity_dicts from rust: ", time.time()-rst)
     assert(1==2)
     
-    
-    # use_python_auc_function = True
-    # use_rust_auc_function = True
-    
-    # st = time.time()
-    # for foreign_key in tesla_pos_imm_dict:
-    #     FOREIGN_params_numeric = string_to_numeric_tuple(foreign_key)
+    # import re
+    # def remove_leading_zeros_scientific_notation(input_str):
+    #     if 'e' in input_str:
+    #         # Use regular expression to find and remove leading zeros after 'e'
+    #         return re.sub(r'e-0+', 'e-', input_str)
+    #     else:
+    #         return input_str  # Return input_str unchanged if 'e' is not present
 
-    #     for self_key in tesla_pos_imm_dict[foreign_key]:
-    #         SELF_params_numeric = string_to_numeric_tuple(self_key)
+
+    # for gamma_d_self in gamma_d_self_values:
+    #     for gamma_logKd_self in gamma_logkd_self_values:
+    #         rst = time.time()
+    #         auc_dict = {}
+            
+    #         p1 = remove_leading_zeros_scientific_notation(str(gamma_d_self)) 
+    #         p2 = remove_leading_zeros_scientific_notation(str(gamma_logKd_self))
+    #         tesla_pos_imm_dict = immunogenicity_rust.get_immunogenicity_dict_py(tesla_pos_pkl_list, (), p1, p2) 
+    #         tesla_neg_imm_dict = immunogenicity_rust.get_immunogenicity_dict_py(tesla_neg_pkl_list, (), p1, p2)
+        
+            
+    #         koncz_pos_imm_dict = immunogenicity_rust.get_immunogenicity_dict_py(koncz_pos_pkl_list, (), p1, p2)
+    #         koncz_neg_imm_dict = immunogenicity_rust.get_immunogenicity_dict_py(koncz_neg_pkl_list, (), p1, p2)    
+    # assert(1==2)
+    
+    
+    
+    use_python_auc_function = True
+    use_rust_auc_function = True
+    
+    st = time.time()
+    for foreign_key in tesla_pos_imm_dict:
+        FOREIGN_params_numeric = string_to_numeric_tuple(foreign_key)
+
+        for self_key in tesla_pos_imm_dict[foreign_key]:
+            SELF_params_numeric = string_to_numeric_tuple(self_key)
             
             
-    #         if use_python_auc_function:
-    #             tesla_roc_auc = calculate_auc(tesla_pos_imm_dict[foreign_key][self_key], tesla_neg_imm_dict[foreign_key][self_key])
-    #             koncz_roc_auc = calculate_auc(koncz_pos_imm_dict[foreign_key][self_key], koncz_neg_imm_dict[foreign_key][self_key])
-    #         if use_rust_auc_function:    
-    #             tesla_roc_auc_rust = immunogenicity_rust.calculate_auc_py(tesla_pos_imm_dict[foreign_key][self_key], tesla_neg_imm_dict[foreign_key][self_key])
-    #             koncz_roc_auc_rust = immunogenicity_rust.calculate_auc_py(koncz_pos_imm_dict[foreign_key][self_key], koncz_neg_imm_dict[foreign_key][self_key])
-    #             assert(tesla_roc_auc == round(tesla_roc_auc_rust,12))
-    #             assert(koncz_roc_auc == round(koncz_roc_auc_rust,12))
+            if use_python_auc_function:
+                tesla_roc_auc = calculate_auc(tesla_pos_imm_dict[foreign_key][self_key], tesla_neg_imm_dict[foreign_key][self_key])
+                koncz_roc_auc = calculate_auc(koncz_pos_imm_dict[foreign_key][self_key], koncz_neg_imm_dict[foreign_key][self_key])
+            if use_rust_auc_function:    
+                tesla_roc_auc_rust = immunogenicity_rust.calculate_auc_py(tesla_pos_imm_dict[foreign_key][self_key], tesla_neg_imm_dict[foreign_key][self_key])
+                koncz_roc_auc_rust = immunogenicity_rust.calculate_auc_py(koncz_pos_imm_dict[foreign_key][self_key], koncz_neg_imm_dict[foreign_key][self_key])
+                assert(tesla_roc_auc == round(tesla_roc_auc_rust,12))
+                assert(koncz_roc_auc == round(koncz_roc_auc_rust,12))
             
-    #         if FOREIGN_params_numeric[1] not in auc_dict:
-    #             auc_dict[FOREIGN_params_numeric[1]] = {}
-    #         if SELF_params_numeric not in auc_dict[FOREIGN_params_numeric[1]]:
-    #             auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric] = []
+            if FOREIGN_params_numeric[1] not in auc_dict:
+                auc_dict[FOREIGN_params_numeric[1]] = {}
+            if SELF_params_numeric not in auc_dict[FOREIGN_params_numeric[1]]:
+                auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric] = []
                 
-    #         auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric].append([FOREIGN_params_numeric[0], tesla_roc_auc, koncz_roc_auc])
+            auc_dict[FOREIGN_params_numeric[1]][SELF_params_numeric].append([FOREIGN_params_numeric[0], tesla_roc_auc, koncz_roc_auc])
    
-    # print("runtime to eval auc_dict in python: ", time.time()-st)
-    # assert(1==4)
+    print("runtime to eval auc_dict in python: ", time.time()-st)
+    assert(1==4)
 
 
 ###############################################################################

@@ -1,0 +1,31 @@
+#!/bin/bash
+#BSUB -P acc_lukszaLab
+#BSUB -q premium
+#BSUB -n 1
+#BSUB -R rusage[mem=100] # 100MB
+#BSUB -W 0:20                # Hours:minutes
+#BSUB -L /bin/bash
+#BSUB -J run_assemble_Imm_dicts.lsf
+#BSUB -oo run_assemble_Imm_dicts_OUT.txt
+#BSUB -eo run_assemble_Imm_dicts_ERR.txt
+
+chmod +x /sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/immunogenicity_rust/for_CFIT/python_rust_assembly_caller.lsf
+outf='_OUT.txt'
+errf='_ERR.txt'
+
+echo "In run_assemble_Imm_dicts.lsf"
+
+base_directory='/sc/arion/projects/FLAI/marcus/PDAC_Rust_Results/d_ub_100_d_lb_0'
+
+
+start_idx=100
+exclusive_stop_idx=256 # total number of self parameter sets
+
+for ((i=start_idx; i<exclusive_stop_idx; i+=1)); do
+
+  job1Name=assemble_Imm_dict_self_paramset_${i}
+  job1OutErr=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/OUT_ERR_files/assemble_Imm_dict_self_paramset_${i}
+
+
+  bsub -J $job1Name -oo ${job1OutErr}.outf -eo ${job1OutErr}.errf -q premium -P acc_lukszaLab -R rusage[mem=500] -R span[hosts=1] -n 20 -W 10:00 ./python_rust_assembly_caller.lsf "$base_directory" "$i"
+done

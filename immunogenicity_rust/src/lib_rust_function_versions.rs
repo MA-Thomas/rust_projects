@@ -119,12 +119,15 @@ pub fn process_distance_info_vec_rs(dist_file_info: &Vec<(&str, bool, &str)>,
     
     for (csv_distances_file_path, load_dists_from_csv, fasta_path) in dist_file_info.iter() {
 
-        
+        println!("In process_distance_info_vec_rs. csv_distances_file_path: {}", csv_distances_file_path);
+        println!("In process_distance_info_vec_rs. fasta_path: {}", fasta_path);
+
         let mut csv_distances_file_path = csv_distances_file_path.to_string();
         csv_distances_file_path = csv_distances_file_path.replace("QUERYEPISTR", query_epi);
         let csv_distances_file_path: &str = &csv_distances_file_path;
 
         if *load_dists_from_csv {
+            
             let mut csv_distances_file_path_opt: Option<String> = Some(csv_distances_file_path.to_string());
 
             if let Some(path) = csv_distances_file_path_opt.as_mut() {
@@ -193,7 +196,7 @@ pub fn process_distance_info_vec_rs(dist_file_info: &Vec<(&str, bool, &str)>,
 
 
 pub fn process_kd_info_vec_rs(csv_kds_file_path: &str) -> Result<HashMap<String, f64>, String> {
-    
+    println!("[rust] In process_kd_info_vec_rs. Processing KD file at path: {}", csv_kds_file_path);
 
     let mut csv_kds_file_path_opt: Option<String> = Some(csv_kds_file_path.to_string());
 
@@ -460,18 +463,25 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_rs(
     HashMap<String, Option<f64>>,
     u64,
 ), Box<dyn Error>> {
+    /*
+    The boolean compute_logKinv_and_entropy exists because we may want to only compute logCh.
+    The boolean compute_logCh exists because it should only be computed when the target set is self-epitopes.
+     */
+
     let start_time = std::time::Instant::now();
 
     // Load Kds from Target Set into HashMap
+    println!("[rust] In compute_log_non_rho_terms_multi_query_single_hla_rs. KD file path: {}", kd_file_path);
     let mut epi_kd_dict = process_kd_info_vec_rs(kd_file_path)?;
 
     println!("[rust] Kds processing succeeded.");
-    println!("[rust] Length of epi_kd_dict: {}", epi_kd_dict.len());
+    println!("[rust] Length of post-target_epi-filtering epi_kd_dict: {}", epi_kd_dict.len());
 
     // Filter epi_kd_dict based on target_epis_at_hla
     if !(target_epis_at_hla.len() == 1 && target_epis_at_hla[0] == "all") {
         epi_kd_dict.retain(|k, _| target_epis_at_hla.contains(&k.as_str()));
     }
+    println!("[rust] Length of epi_kd_dict: {}", epi_kd_dict.len());
 
     let mut logKinv_entropy_multi_query_dict: HashMap<String, HashMap<String, Option<(f64, f64)>>> =
         HashMap::new();
@@ -506,6 +516,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_rs(
         if !(target_epis_at_hla.len() == 1 && target_epis_at_hla[0] == "all") {
             epi_dist_dict.retain(|k, _| target_epis_at_hla.contains(&k.as_str()));
         }
+        println!("[rust] Length of post-target_epi-filtering epi_dist_dict: {}", epi_dist_dict.len()); 
 
         // Check if both HashMaps have the same keys
         if !have_same_keys(&epi_dist_dict, &epi_kd_dict) {
@@ -515,12 +526,12 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_rs(
 
         //////////    MODEL COMPUTATIONS    /////////
         let mut logKinv_entropy_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
-        let mut logKinv_entropy_no_dist_restriction_dict: HashMap<String, Option<(f64, f64)>> =
-            HashMap::new();
+        let mut logKinv_entropy_no_dist_restriction_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
 
         if compute_logKinv_and_entropy {
             if target_epis_at_hla.is_empty() {
                 logKinv_entropy_dict.insert("no_target".to_string(), None);
+                logKinv_entropy_no_dist_restriction_dict.insert("no_target".to_string(), None);
             } else {
                 logKinv_entropy_dict = compute_logKinv_and_entropy_dict_rs(
                     &epi_dist_dict,
@@ -808,9 +819,9 @@ pub fn immunogenicity_dict_from_pickle_files_rs(
     // Load pickle files
     let start_time = std::time::Instant::now();
     let pickle_contents_vec = load_all_pkl_files(file_paths, filter_on_self_param_keys)?;
-    // let end_time = std::time::Instant::now();
-    // let elapsed_time = (end_time - start_time).as_secs_f64();
-    // println!("Elapsed time for load_all_pkl_files(): {:.6} seconds", elapsed_time);
+    let end_time = std::time::Instant::now();
+    let elapsed_time = (end_time - start_time).as_secs_f64();
+    println!("[rust] Elapsed time for load_all_pkl_files(): {:.6} seconds", elapsed_time);
 
     // Each PickleContents struct corresponds to a single long query epi-hla pair.
     // There may be multiple associated query 9mers associated with the long query epi.

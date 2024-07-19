@@ -19,6 +19,8 @@ use serde_pickle::de::{from_slice, DeOptions};
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
 
+use std::collections::HashSet;
+
 // This script contains I/O functions that do not belong to an impl block for a custom type.
 
 /////////////////////////////////////////////////////////////////
@@ -299,6 +301,25 @@ pub fn filter_dict_for_middle_key(
         .filter(|(_, filtered_middle_map)| !filtered_middle_map.is_empty())
         .collect()
 }
+pub fn check_middle_keys_in_dict(
+    dict: &HashMap<String, HashMap<String, HashMap<String, Option<f64>>>>,
+    keys: &[&str],
+) -> Option<Vec<String>> {
+    let mut missing_keys = Vec::new();
+
+    for key in keys {
+        let key_found = dict.values().any(|middle_map| middle_map.contains_key(*key));
+        if !key_found {
+            missing_keys.push((*key).to_string());
+        }
+    }
+
+    if missing_keys.is_empty() {
+        None
+    } else {
+        Some(missing_keys)
+    }
+}
 
 pub fn load_epi_hla_pkl_file(pkl_file_path: &str, filter_on_self_param_keys: Option<&[&str]>) -> Result<PickleContents, Box<dyn Error>> {
     /*
@@ -314,8 +335,38 @@ pub fn load_epi_hla_pkl_file(pkl_file_path: &str, filter_on_self_param_keys: Opt
 
     // Deserialize the data
     let outputs: PickleContents = from_slice(&buffer, DeOptions::default()).map_err(|e| format!("Failed to deserialize data: {}", e))?;
-    let outputs = if let Some(self_param_keys) = filter_on_self_param_keys {
-        PickleContents {
+    
+    // let outputs = if let Some(self_param_keys) = filter_on_self_param_keys {
+    //     PickleContents {
+    //         logKInv_entropy_self_dict: filter_dict_for_inner_key(&outputs.logKInv_entropy_self_dict, self_param_keys),
+    //         logCh_dict: outputs.logCh_dict,
+    //         logKInv_entropy_Koncz_imm_epi_dict: outputs.logKInv_entropy_Koncz_imm_epi_dict,
+    //         logKInv_entropy_Koncz_non_imm_epi_dict: outputs.logKInv_entropy_Koncz_non_imm_epi_dict,
+    //         logKInv_entropy_Ours_imm_epi_dict: outputs.logKInv_entropy_Ours_imm_epi_dict,
+    //         logKInv_entropy_Ours_non_imm_epi_dict: outputs.logKInv_entropy_Ours_non_imm_epi_dict,
+    //         logKInv_entropy_Tesla_imm_epi_dict: outputs.logKInv_entropy_Tesla_imm_epi_dict,
+    //         logKInv_entropy_Tesla_non_imm_epi_dict: outputs.logKInv_entropy_Tesla_non_imm_epi_dict,
+    //         log_rho_multi_query_dict: filter_dict_for_middle_key(&outputs.log_rho_multi_query_dict, self_param_keys),
+    //         full_query_epitope: outputs.full_query_epitope,
+    //         query_allele: outputs.query_allele,
+    //     }
+    // } else {
+    //     outputs
+    // };
+
+    // Validate filter keys if provided
+    let mut outputs: PickleContents = from_slice(&buffer, DeOptions::default()).map_err(|e| format!("Failed to deserialize data: {}", e))?;
+
+    if let Some(self_param_keys) = filter_on_self_param_keys {
+        // Check if check_middle_keys_in_dict is None. If it is Some, print the missing keys and then throw an error.
+        if let Some(missing_keys) = check_middle_keys_in_dict(&outputs.log_rho_multi_query_dict, self_param_keys) {
+            // Print the missing keys and return an error.
+            println!("Missing keys: {:?}", missing_keys);
+            return Err(format!("Missing keys: {:?}", missing_keys).into());
+        }
+
+        // Perform filtering
+        outputs = PickleContents {
             logKInv_entropy_self_dict: filter_dict_for_inner_key(&outputs.logKInv_entropy_self_dict, self_param_keys),
             logCh_dict: outputs.logCh_dict,
             logKInv_entropy_Koncz_imm_epi_dict: outputs.logKInv_entropy_Koncz_imm_epi_dict,
@@ -327,10 +378,8 @@ pub fn load_epi_hla_pkl_file(pkl_file_path: &str, filter_on_self_param_keys: Opt
             log_rho_multi_query_dict: filter_dict_for_middle_key(&outputs.log_rho_multi_query_dict, self_param_keys),
             full_query_epitope: outputs.full_query_epitope,
             query_allele: outputs.query_allele,
-        }
-    } else {
-        outputs
-    };
+        };
+    }
 
     Ok(outputs)
 }

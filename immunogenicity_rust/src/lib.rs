@@ -45,7 +45,7 @@ use lib_rust_function_versions::{calculate_auc_dict_iteratively_from_pickle_file
     compute_log_non_rho_terms_multi_query_single_hla_rs, compute_log_rho_multi_query_rs, 
     immunogenicity_dict_from_pickle_files_rs, immunogenicity_dict_for_auc_from_pickle_files_rs, process_distance_info_vec_rs, process_kd_info_vec_rs};
 use lib_data_structures_auxiliary_functions::{DistanceMetricContext, DistanceMetricType, TargetEpiDistances,CalculationError, 
-    have_same_keys, print_keys_diff, convert_nested_PyDict_to_HashMap};
+    have_same_keys, print_keys_diff, convert_nested_PyDict_to_HashMap, tuple_to_string};
 // use lib_math_functions::{};
 /////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
@@ -244,21 +244,50 @@ struct Params {
 fn get_immunogenicity_dict_py(
     file_paths_list1: Vec<&str>,
     query_presentation_tuples1: Option<Vec<(&str, f64)>>,
+    self_gamma_d: Option<String>,
+    self_gamma_logKd: Option<String>,
  ) -> PyResult<HashMap<(String,String),HashMap<String, HashMap<String, Vec<f64>>>>> {
 
     /*
-    This function takes an optional arguments: query_presentation_tuples1.
+    This function takes an optional arguments: 
+    1. query_presentation_tuples1
     This provides the query epitope presentation factors (e.g., 1/Kd(query_epi,hla)) a vectors of tuples.
+    2. (self_gamma_d, self_gamma_logKd) 
+    These provide the self params to filter result on.
      */
+    // println!("[rust] file_paths_list1: {:?}", file_paths_list1);
+
+    // Print query_presentation_tuples1 if it exists
+    if let Some(query_tuples) = &query_presentation_tuples1 {
+        println!("[rust] query_presentation_tuples1:");
+        for (epi, factor) in query_tuples {
+            println!("  - {}: {}", epi, factor);
+        }
+    }
+
+    // Print self_gamma_d and self_gamma_logKd if they exist
+    if let (Some(gamma_d), Some(gamma_logKd)) = (&self_gamma_d, &self_gamma_logKd) {
+        println!("[rust] self_gamma_d: {}", gamma_d);
+        println!("[rust] self_gamma_logKd: {}", gamma_logKd);
+    }
 
      // Convert the tuples vectors - if they exist - into Option<HashMap<String, f64>>
     let query_presentation_factor_map1: Option<HashMap<String, f64>> = query_presentation_tuples1.map(|tuples| {
         tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
     });
-
-
+    
+    let filter_on_key: Option<Vec<&str>> = match (self_gamma_d, self_gamma_logKd) {
+        (Some(gamma_d), Some(gamma_logKd)) => {
+            let key_string = format!("({}, {})", gamma_d, gamma_logKd);
+            // Convert key_string into a static string slice
+            Some(vec![Box::leak(key_string.into_boxed_str())])
+        },
+        _ => None,
+    };
+    println!("[rust] filter_on_key: {:?}", filter_on_key);
+    
     // Call the existing function with the first list of file paths (None argument means don't filter on specific outer_key)
-    let dict1 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, None, query_presentation_factor_map1.as_ref()) {
+    let dict1 = match immunogenicity_dict_from_pickle_files_rs(&file_paths_list1, filter_on_key.as_deref(), query_presentation_factor_map1.as_ref()) {
         Ok(dict) => dict,
         Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),
     };
@@ -280,6 +309,7 @@ fn get_immunogenicity_dicts_for_auc_py(
     These provide the query epitope presentation factors (e.g., 1/Kd(query_epi,hla)) a vectors of tuples.
      */
 
+
      // Convert the tuples vectors - if they exist - into Option<HashMap<String, f64>>
     let query_presentation_factor_map1: Option<HashMap<String, f64>> = query_presentation_tuples1.map(|tuples| {
         tuples.into_iter().map(|(epi, factor)| (epi.to_string(), factor)).collect()
@@ -289,7 +319,7 @@ fn get_immunogenicity_dicts_for_auc_py(
     });
 
         
-    // Call the existing function with the first list of file paths (None argument means don't filter on specific outer_key, i.e., foreign paramset)
+    // Call the existing function with the first list of file paths (None argument means don't filter on specific outer_key, i.e., self paramset)
     let dict1 = match immunogenicity_dict_for_auc_from_pickle_files_rs(&file_paths_list1, None, query_presentation_factor_map1.as_ref()) {
         Ok(dict) => dict,
         Err(e) => return Err(PyRuntimeError::new_err(e.to_string())),

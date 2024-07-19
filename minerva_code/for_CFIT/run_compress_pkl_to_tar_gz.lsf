@@ -1,0 +1,19 @@
+#!/bin/bash
+#BSUB -P acc_lukszaLab
+#BSUB -q premium
+#BSUB -n 1
+#BSUB -R rusage[mem=5000] # 5GB
+#BSUB -W 1:50                # Hours:minutes
+#BSUB -L /bin/bash
+#BSUB -J run_assemble_Imm_dicts.lsf
+#BSUB -oo run_assemble_Imm_dicts_OUT.txt
+#BSUB -eo run_assemble_Imm_dicts_ERR.txt
+
+outf='_OUT.txt'
+errf='_ERR.txt'
+
+cdir=/sc/arion/projects/FLAI/marcus/
+echo "In run_compress_pkl_to_tar_gz.lsf"
+
+
+/hpc/users/thomam32/.conda/envs/general_3.9/bin/python3.9 $cdir/compress_pkl_to_tar_gz.py
