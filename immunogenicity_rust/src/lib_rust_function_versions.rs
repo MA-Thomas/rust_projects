@@ -678,99 +678,110 @@ pub fn compute_log_rho_multi_query_rs(
             all_keys_set.extend(logKInv_entropy_Koncz_imm.keys());
             all_keys_set.extend(logKInv_entropy_Koncz_non_imm.keys());
 
-            // Exclude the foreign parameter string: "no_target"
-            all_keys_set.retain(|&key| key != "no_target");
-
             /*
-            We need to iterate over all foreign keys excluding "no_target" in order to extract log_K_inv and entropy 
-            for each particulat foreign_dict. Certain of these foreign_dicts will nonetheless contain only
-            the foreign key "no_target". We need to skip over these individually within the loop over foreign_keys. 
+            We need to iterate over all foreign keys in order to extract log_K_inv and entropy 
+            from the particulat foreign_dicts that do not have the key "no_target". 
+            If all foreign_dicts have the single key "no_target", log_rho will depend only on the self_term. 
              */
-            // Iterate over foreign dicts and extract log_K_inv and entropy for each, excluding the ones that have "no_target".
-            for foreign_key in all_keys_set {
+            
+            let no_target = String::from("no_target");
+            if !(all_keys_set.len() == 1 && all_keys_set.contains(&no_target)) {
+                // In the if case, the epitope has some foreign targets (not all foreign_dicts have the single key "no_target")
                 
-                iedb_imm_term = 0.0;
-                iedb_non_imm_term = 0.0;
-                tesla_imm_term = 0.0;
-                tesla_non_imm_term = 0.0;
-                log_rho = 0.0;
-
-                if use_Ours_contribution {
-
-                    // The 'key' is the parameter set string. If it is "no_target", that means there were no logKInv and no entropy values (at any parameter set)
-                    let target_epitopes_available = logKInv_entropy_Ours_imm.keys().filter(|&key| key != "no_target").count() > 1;
-                    if target_epitopes_available {
-                        let foreign_value = logKInv_entropy_Ours_imm.get(foreign_key);
-                        let (log_K_inv_Ours_imm, entropy_Ours_imm) = match foreign_value {
-                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                            _ => continue, // Skip if self_value is None
-                        };
-                        iedb_imm_term += (log_K_inv_Ours_imm - entropy_Ours_imm).exp();
-                    }
-
-                    let target_epitopes_available = logKInv_entropy_Ours_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
-                    if target_epitopes_available {
-                        let foreign_value = logKInv_entropy_Ours_non_imm.get(foreign_key);
-                        let (log_K_inv_Ours_non_imm, entropy_Ours_non_imm) = match foreign_value {
-                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                            _ => continue, // Skip if self_value is None
-                        };
-                        iedb_non_imm_term += (log_K_inv_Ours_non_imm - entropy_Ours_non_imm).exp();
-                    }
-                } 
-
-                if use_Koncz_contribution {
-
-                    let target_epitopes_available = logKInv_entropy_Koncz_imm.keys().filter(|&key| key != "no_target").count() > 1;
-                    if target_epitopes_available {
-                        let foreign_value = logKInv_entropy_Koncz_imm.get(foreign_key);
-                        let (log_K_inv_Koncz_imm, entropy_Koncz_imm) = match foreign_value {
-                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                            _ => continue, // Skip if foreign_value is None or inner value is None
-                        };
-                        iedb_imm_term += (log_K_inv_Koncz_imm - entropy_Koncz_imm).exp();
-                    }
-
-                    let target_epitopes_available = logKInv_entropy_Koncz_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
-                    if target_epitopes_available {
-                        let foreign_value = logKInv_entropy_Koncz_non_imm.get(foreign_key);
-                        let (log_K_inv_Koncz_non_imm, entropy_Koncz_non_imm) = match foreign_value {
-                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                            _ => continue, // Skip if self_value is None
-                        };
-                        iedb_non_imm_term += (log_K_inv_Koncz_non_imm - entropy_Koncz_non_imm).exp();
-                    }
-                }
-
-                if use_Tesla_contribution {
+                // Iterate over foreign dicts and extract log_K_inv and entropy for each, excluding the ones that have "no_target".
+                for foreign_key in all_keys_set {
                     
-                    let target_epitopes_available = logKInv_entropy_Tesla_imm.keys().filter(|&key| key != "no_target").count() > 1;
-                    if target_epitopes_available {
-                        let foreign_value = logKInv_entropy_Tesla_imm.get(foreign_key);
-                        let (log_K_inv_Tesla_imm, entropy_Tesla_imm) = match foreign_value {
-                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                            _ => continue, // Skip if foreign_value is None or inner value is None
-                        };
-                        tesla_imm_term += (log_K_inv_Tesla_imm - entropy_Tesla_imm).exp();
+                    iedb_imm_term = 0.0;
+                    iedb_non_imm_term = 0.0;
+                    tesla_imm_term = 0.0;
+                    tesla_non_imm_term = 0.0;
+                    
+                    if use_Ours_contribution {
+
+                        // The 'key' is the parameter set string. If it is "no_target", that means there were no logKInv and no entropy values (at any parameter set)
+                        let target_epitopes_available = logKInv_entropy_Ours_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_Ours_imm.get(foreign_key);
+                            let (log_K_inv_Ours_imm, entropy_Ours_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if self_value is None
+                            };
+                            iedb_imm_term += (log_K_inv_Ours_imm - entropy_Ours_imm).exp();
+                        }
+
+                        let target_epitopes_available = logKInv_entropy_Ours_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_Ours_non_imm.get(foreign_key);
+                            let (log_K_inv_Ours_non_imm, entropy_Ours_non_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if self_value is None
+                            };
+                            iedb_non_imm_term += (log_K_inv_Ours_non_imm - entropy_Ours_non_imm).exp();
+                        }
+                    } 
+
+                    if use_Koncz_contribution {
+
+                        let target_epitopes_available = logKInv_entropy_Koncz_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_Koncz_imm.get(foreign_key);
+                            let (log_K_inv_Koncz_imm, entropy_Koncz_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if foreign_value is None or inner value is None
+                            };
+                            iedb_imm_term += (log_K_inv_Koncz_imm - entropy_Koncz_imm).exp();
+                        }
+
+                        let target_epitopes_available = logKInv_entropy_Koncz_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_Koncz_non_imm.get(foreign_key);
+                            let (log_K_inv_Koncz_non_imm, entropy_Koncz_non_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if self_value is None
+                            };
+                            iedb_non_imm_term += (log_K_inv_Koncz_non_imm - entropy_Koncz_non_imm).exp();
+                        }
                     }
 
-                    let target_epitopes_available = logKInv_entropy_Tesla_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
-                    if target_epitopes_available {
-                        let foreign_value = logKInv_entropy_Tesla_non_imm.get(foreign_key);
-                        let (log_K_inv_Tesla_non_imm, entropy_Tesla_non_imm) = match foreign_value {
-                            Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
-                            _ => continue, // Skip if self_value is None
-                        };
-                        tesla_non_imm_term += (log_K_inv_Tesla_non_imm - entropy_Tesla_non_imm).exp();
+                    if use_Tesla_contribution {
+                        
+                        let target_epitopes_available = logKInv_entropy_Tesla_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_Tesla_imm.get(foreign_key);
+                            let (log_K_inv_Tesla_imm, entropy_Tesla_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if foreign_value is None or inner value is None
+                            };
+                            tesla_imm_term += (log_K_inv_Tesla_imm - entropy_Tesla_imm).exp();
+                        }
+
+                        let target_epitopes_available = logKInv_entropy_Tesla_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_Tesla_non_imm.get(foreign_key);
+                            let (log_K_inv_Tesla_non_imm, entropy_Tesla_non_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if self_value is None
+                            };
+                            tesla_non_imm_term += (log_K_inv_Tesla_non_imm - entropy_Tesla_non_imm).exp();
+                        }
                     }
+                    log_rho = -self_term + iedb_imm_term - iedb_non_imm_term + tesla_imm_term - tesla_non_imm_term;
+
+                    // Insert log_rho at current self/foreign params
+                    log_rho_dict
+                    .entry(self_key.clone())
+                    .or_insert_with(HashMap::new)
+                    .insert(foreign_key.clone(), Some(log_rho));
                 }
-                log_rho = -self_term + iedb_imm_term - iedb_non_imm_term + tesla_imm_term - tesla_non_imm_term;
+            } else {
+                // In the else case, the epitope has no foreign targets at all (all foreign_dicts have the single key "no_target")
+                log_rho = -self_term;
 
-                // Insert log_rho at current self/foreign params
+                // Insert log_rho at current self/foreign params. 
                 log_rho_dict
                 .entry(self_key.clone())
                 .or_insert_with(HashMap::new)
-                .insert(foreign_key.clone(), Some(log_rho));
+                .insert("no_target".to_string(), Some(log_rho));
             }
                 
         }
