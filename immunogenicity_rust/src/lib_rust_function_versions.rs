@@ -525,6 +525,7 @@ pub fn compute_log_non_rho_terms_multi_query_single_hla_rs(
         }
 
         //////////    MODEL COMPUTATIONS    /////////
+        // Structure: logKinv_entropy_dict[parameter_set_string] = (logKinv, entropy)
         let mut logKinv_entropy_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
         let mut logKinv_entropy_no_dist_restriction_dict: HashMap<String, Option<(f64, f64)>> = HashMap::new();
 
@@ -677,16 +678,26 @@ pub fn compute_log_rho_multi_query_rs(
             all_keys_set.extend(logKInv_entropy_Koncz_imm.keys());
             all_keys_set.extend(logKInv_entropy_Koncz_non_imm.keys());
 
-            // Iterate over foreign dicts and extract log_K_inv and entropy for each.
+            // Exclude the foreign parameter string: "no_target"
+            all_keys_set.retain(|&key| key != "no_target");
+
+            /*
+            We need to iterate over all foreign keys excluding "no_target" in order to extract log_K_inv and entropy 
+            for each particulat foreign_dict. Certain of these foreign_dicts will nonetheless contain only
+            the foreign key "no_target". We need to skip over these individually within the loop over foreign_keys. 
+             */
+            // Iterate over foreign dicts and extract log_K_inv and entropy for each, excluding the ones that have "no_target".
             for foreign_key in all_keys_set {
                 
                 iedb_imm_term = 0.0;
                 iedb_non_imm_term = 0.0;
                 tesla_imm_term = 0.0;
                 tesla_non_imm_term = 0.0;
+                log_rho = 0.0;
 
                 if use_Ours_contribution {
 
+                    // The 'key' is the parameter set string. If it is "no_target", that means there were no logKInv and no entropy values (at any parameter set)
                     let target_epitopes_available = logKInv_entropy_Ours_imm.keys().filter(|&key| key != "no_target").count() > 1;
                     if target_epitopes_available {
                         let foreign_value = logKInv_entropy_Ours_imm.get(foreign_key);
