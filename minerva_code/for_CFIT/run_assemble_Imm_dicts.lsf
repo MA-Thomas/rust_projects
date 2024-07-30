@@ -2,7 +2,7 @@
 #BSUB -P acc_lukszaLab
 #BSUB -q premium
 #BSUB -n 1
-#BSUB -R rusage[mem=100] # 100MB
+#BSUB -R rusage[mem=30] # 30MB
 #BSUB -W 0:20                # Hours:minutes
 #BSUB -L /bin/bash
 #BSUB -J run_assemble_Imm_dicts.lsf

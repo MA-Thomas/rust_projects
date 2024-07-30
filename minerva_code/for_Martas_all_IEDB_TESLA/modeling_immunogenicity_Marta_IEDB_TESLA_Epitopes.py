@@ -77,6 +77,12 @@ HLAC = ['HLA-C0303', 'HLA-C0401', 'HLA-C0501', 'HLA-C0602', 'HLA-C0701', 'HLA-C0
 
 HLA = HLAA + HLAB + HLAC
 
+'''
+Marta gave me a file that contains all of IEDB and all of Tesla (just the 9mers from each, longer peptides excluded).
+She wanted me to compute KInv_self for these across parameter sets.
+
+It wouldn't really make sense to compute the full nb for these.
+'''
 if __name__ == "__main__":
 
     # # LOCAL
@@ -114,9 +120,10 @@ if __name__ == "__main__":
 
     # # MINERVA
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    # parser.add_argument("-cTEC", action='store_true', default=False, help="whether to use cTEC gene expression")
-    # parser.add_argument("-cTEC_conc", action='store_true', default=False)
-    parser.add_argument("-save_pkl_dir", default="/sc/arion/projects/FLAI/marcus/PDAC_Rust_Results")
+
+    parser.add_argument("-neo_hla_tuples_csv", default="/sc/arion/projects/FLAI/marcus/MARTA_ALL_IEDB_TESLA_ninemers_HLAs/sorted_imm_iedb_tesla_from_Marta.csv")
+    parser.add_argument("-save_pkl_dir", default="/sc/arion/projects/FLAI/marcus/MARTA_IEDB_TESLA_Rust_Results/Immunogenic")
+
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
 
     parser.add_argument("-data_matrix_dir", default="/sc/arion/work/thomam32/WorkingDir/CFIT/cfit/data/matrices/")
@@ -131,8 +138,6 @@ if __name__ == "__main__":
 
     parser.add_argument("-csv_S_dir", default="/sc/arion/projects/FLAI/marcus/Self_Epitopes")
     parser.add_argument("-csv_F_dir", default="/sc/arion/projects/FLAI/marcus/Foreign_Epitopes")
-
-    parser.add_argument("-neo_hla_tuples_csv", default="/sc/arion/projects/FLAI/marcus/PDAC_Data_orig_Neos_HLAs/sorted_query_neoantigen_hla_Kd_tuples_Kd_thr_5000.csv")
 
     parser.add_argument("-load_target_hla_epi_dir", default="/sc/arion/projects/FLAI/marcus/Foreign_Epitopes")
 
@@ -179,8 +184,8 @@ if __name__ == "__main__":
     start_time = time.time()
 
 
-    with open(os.path.join(args.load_target_hla_epi_dir,'target_hla_epi_dict.pkl'),'rb') as pot:
-        target_hla_epi_dict = pickle.load(pot)
+    # with open(os.path.join(args.load_target_hla_epi_dir,'target_hla_epi_dict.pkl'),'rb') as pot:
+    #     target_hla_epi_dict = pickle.load(pot)
 
     sorted_query_neoantigen_hla_tuples = load_neo_hla_tuples_from_csv(args.neo_hla_tuples_csv)
 
@@ -315,167 +320,9 @@ if __name__ == "__main__":
         '''
         #################################################################################################
         #################################################################################################
-        if allele in target_hla_epi_dict['koncz_imm']:
-            target_epitopes_at_allele = target_hla_epi_dict['koncz_imm'][allele]
-        else:
-            target_epitopes_at_allele = []
-        print("target_epitopes_at_allele (koncz_imm): ",target_epitopes_at_allele)
-        logKInv_entropy_Koncz_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
-            query_epi_list,
-            [(csv_KImm_dists_file,load_precomputed_distances,immunogenic_Koncz_fasta_path)], csv_KImm_kds_file,
-            distance_metric,
-            data_matrix_dir,
-            max_target_num,
-            gamma_d_nonself_values,
-            gamma_logkd_nonself_values,
-            d_ub_foreign, d_lb_foreign,
-            compute_logKinv_and_entropy,
-            compute_logCh,
-            target_epitopes_at_allele,
-            calc_second_hm_without_dist_restriction,
-        )
-        print("len(logKInv_entropy_Koncz_imm_epi_dict): ",len(logKInv_entropy_Koncz_imm_epi_dict))
-        # print("A few items from logKInv_entropy_Koncz_imm_epi_dict: ")
-        # for key, value in itertools.islice(logKInv_entropy_Koncz_imm_epi_dict.items(), 5):
-        #     print(f"{key}: {value}")
-        print("[python] Koncz_imm runtime: ",runtime)
+        # # FOREIGN DICTS RUST CALLERS REMOVED.
 
-        if allele in target_hla_epi_dict['koncz_nonimm']:
-            target_epitopes_at_allele = target_hla_epi_dict['koncz_nonimm'][allele]
-        else:
-            target_epitopes_at_allele = []
-        print("target_epitopes_at_allele (koncz_non_imm): ",target_epitopes_at_allele)
-        logKInv_entropy_Koncz_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
-            query_epi_list,
-            [(csv_KNImm_dists_file,load_precomputed_distances,nonimmunogenic_Koncz_fasta_path)], csv_KNImm_kds_file,
-            distance_metric,
-            data_matrix_dir,
-            max_target_num,
-            gamma_d_nonself_values,
-            gamma_logkd_nonself_values,
-            d_ub_foreign, d_lb_foreign,
-            compute_logKinv_and_entropy,
-            compute_logCh,
-            target_epitopes_at_allele,
-            calc_second_hm_without_dist_restriction,
-        )
-        print("[python] Koncz_non_imm runtime: ",runtime)
-
-        if allele in target_hla_epi_dict['ours_imm']:
-            target_epitopes_at_allele = target_hla_epi_dict['ours_imm'][allele]
-        else:
-            target_epitopes_at_allele = []
-        print("target_epitopes_at_allele (ours_imm): ",target_epitopes_at_allele)
-        logKInv_entropy_Ours_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
-            query_epi_list,
-            [(csv_OImm_dists_file,load_precomputed_distances,immunogenic_Ours_fasta_path)], csv_OImm_kds_file,
-            distance_metric,
-            data_matrix_dir,
-            max_target_num,
-            gamma_d_nonself_values,
-            gamma_logkd_nonself_values,
-            d_ub_foreign, d_lb_foreign,
-            compute_logKinv_and_entropy,
-            compute_logCh,
-            target_epitopes_at_allele,
-            calc_second_hm_without_dist_restriction,
-        )
-        print("[python] Ours_imm runtime: ",runtime)
-
-        if allele in target_hla_epi_dict['ours_nonimm']:
-            target_epitopes_at_allele = target_hla_epi_dict['ours_nonimm'][allele]
-        else:
-            target_epitopes_at_allele = []
-        print("target_epitopes_at_allele (ours_non_imm): ",target_epitopes_at_allele)
-        logKInv_entropy_Ours_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
-            query_epi_list,
-            [(csv_ONImm_dists_file,load_precomputed_distances,nonimmunogenic_Ours_fasta_path)], csv_ONImm_kds_file,
-            distance_metric,
-            data_matrix_dir,
-            max_target_num,
-            gamma_d_nonself_values,
-            gamma_logkd_nonself_values,
-            d_ub_foreign, d_lb_foreign,
-            compute_logKinv_and_entropy,
-            compute_logCh,
-            target_epitopes_at_allele,
-            calc_second_hm_without_dist_restriction,
-        )
-        print("[python] Ours_non_imm runtime: ",runtime)
-
-        if allele in target_hla_epi_dict['tesla_imm']:
-            target_epitopes_at_allele = target_hla_epi_dict['tesla_imm'][allele]
-        else:
-            target_epitopes_at_allele = []
-        print("target_epitopes_at_allele (Tesla_imm): ",target_epitopes_at_allele)
-        logKInv_entropy_Tesla_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
-            query_epi_list,
-            [(csv_TImm_dists_file,load_precomputed_distances,immunogenic_Tesla_fasta_path)], csv_TImm_kds_file,
-            distance_metric,
-            data_matrix_dir,
-            max_target_num,
-            gamma_d_nonself_values,
-            gamma_logkd_nonself_values,
-            d_ub_foreign, d_lb_foreign,
-            compute_logKinv_and_entropy,
-            compute_logCh,
-            target_epitopes_at_allele,
-            calc_second_hm_without_dist_restriction,
-        )
-        print("[python] Tesla_imm runtime: ",runtime)
-
-        if allele in target_hla_epi_dict['tesla_nonimm']:
-            target_epitopes_at_allele = target_hla_epi_dict['tesla_nonimm'][allele]
-        else:
-            target_epitopes_at_allele = []
-        print("target_epitopes_at_allele (Tesla_non_imm): ",target_epitopes_at_allele)
-        logKInv_entropy_Tesla_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
-            query_epi_list,
-            [(csv_TNImm_dists_file,load_precomputed_distances,nonimmunogenic_Tesla_fasta_path)], csv_TNImm_kds_file,
-            distance_metric,
-            data_matrix_dir,
-            max_target_num,
-            gamma_d_nonself_values,
-            gamma_logkd_nonself_values,
-            d_ub_foreign, d_lb_foreign,
-            compute_logKinv_and_entropy,
-            compute_logCh,
-            target_epitopes_at_allele,
-            calc_second_hm_without_dist_restriction,
-        )
-        print("[python] Tesla_non_imm runtime: ",runtime)
-
-
-        ##  ---------------------------------------------
-        ##  --------------  COMPUTE rho  ----------------
-        use_Ours_contribution = True
-        use_Koncz_contribution = True
-        use_Tesla_contribution = True
-
-        log_rho_dict, runtime = immunogenicity_rust.compute_log_rho_multi_query_py(
-            logKInv_entropy_self_for_rho_dict,
-            logKInv_entropy_Ours_imm_epi_dict,
-            logKInv_entropy_Ours_non_imm_epi_dict,
-            use_Ours_contribution,
-            logKInv_entropy_Koncz_imm_epi_dict,
-            logKInv_entropy_Koncz_non_imm_epi_dict,
-            use_Koncz_contribution,
-            logKInv_entropy_Tesla_imm_epi_dict,
-            logKInv_entropy_Tesla_non_imm_epi_dict,
-            use_Tesla_contribution,
-        )
-        print("[python] log_rho_dict runtime: ",runtime)
-        print("Now saving to .pkl ...")
-        '''
-            NOTE: the terms (logKInv_entropy_Tesla_imm_epi_dict, logKInv_entropy_Tesla_non_imm_epi_dict)
-            do not exist in the .pkl files for A0201, A0301, A1101 because I forgot to add them to this
-            line of code here below.
-        '''
-        outputs = [logKInv_entropy_self_dict, logCh_dict,
-                   logKInv_entropy_Koncz_imm_epi_dict, logKInv_entropy_Koncz_non_imm_epi_dict,
-                   logKInv_entropy_Ours_imm_epi_dict, logKInv_entropy_Ours_non_imm_epi_dict,
-                   logKInv_entropy_Tesla_imm_epi_dict, logKInv_entropy_Tesla_non_imm_epi_dict,
-                   log_rho_dict,
+        outputs = [logKInv_entropy_self_dict,
                    original_query_epitope, allele]
 
         # save_pkl_dir = args.save_pkl_dir + '/d_ub_'+str(d_ub)+'_d_lb_'+str(d_lb)+'/'+allele
@@ -487,6 +334,7 @@ if __name__ == "__main__":
         #     strg += elem + '_'
         # strg += hla
         # strg += '.pkl'
+
         # with open(os.path.join(save_pkl_dir,strg), 'wb') as pk:
         #     pickle.dump(outputs, pk)
 

@@ -9,7 +9,7 @@
 #BSUB -oo run_compute_immunogenicity_factors_OUT.txt
 #BSUB -eo run_compute_immunogenicity_factors_ERR.txt
 
-chmod +x /sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/immunogenicity_rust/for_CFIT/python_rust_caller.lsf
+chmod +x /sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/immunogenicity_rust/for_Martas_all_IEDB_TESLA/python_rust_caller.lsf
 outf='_OUT.txt'
 errf='_ERR.txt'
 
@@ -17,11 +17,16 @@ echo "In run_compute_immunogenicity_factors.lsf"
 
 
 
-# Define the total number of indices and the step (CFIT Data_orig)
-n_stop_exclusive=18612  # total number of indices (number of assay epitopes)
+
+# Define the total number of indices and the step (Marta all IEDB_TESLA immunogenic)
+# n_stop_exclusive=21365  # total number of indices (number of assay epitopes)
+# step=10  # fixed number of indices between start and stop (number of assay epitopes handled sequentially per job)
+# n_restart=6  # variable to hold the restart index if many tuples have been computed and I don't want to repeat them
+
+# # Define the total number of indices and the step (Marta all IEDB_TESLA nonimmunogenic)
+n_stop_exclusive=21073  # total number of indices (number of assay epitopes)
 step=10  # fixed number of indices between start and stop (number of assay epitopes handled sequentially per job)
 n_restart=0  # variable to hold the restart index if many tuples have been computed and I don't want to repeat them
-
 
 
 # Create the list of start/stop tuples
