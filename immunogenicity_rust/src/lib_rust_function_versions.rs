@@ -613,6 +613,9 @@ pub fn compute_log_rho_multi_query_rs(
     query_dict_logKInv_entropy_Tesla_imm: &HashMap<String, HashMap<String, Option<(f64, f64)>>>,
     query_dict_logKInv_entropy_Tesla_non_imm: &HashMap<String, HashMap<String, Option<(f64, f64)>>>,
     use_Tesla_contribution: bool,
+    query_dict_logKInv_entropy_AllOtherIEDB_imm: &HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    query_dict_logKInv_entropy_AllOtherIEDB_non_imm: &HashMap<String, HashMap<String, Option<(f64, f64)>>>,
+    use_AllOtherIEDB_contribution: bool,
 ) -> Result<(HashMap<String, HashMap<String, HashMap<String, Option<f64>>>>, u64), String> {
     let start_time = std::time::Instant::now();
 
@@ -649,6 +652,14 @@ pub fn compute_log_rho_multi_query_rs(
             Some(values) => values,
             None => panic!("logKInv_entropy_Tesla_non_imm Key '{}' not found", query_epi),
         };
+        let logKInv_entropy_AllOtherIEDB_imm = match query_dict_logKInv_entropy_AllOtherIEDB_imm.get(query_epi) {
+            Some(values) => values,
+            None => panic!("logKInv_entropy_AllOtherIEDB_imm Key '{}' not found", query_epi),
+        };
+        let logKInv_entropy_AllOtherIEDB_non_imm = match query_dict_logKInv_entropy_AllOtherIEDB_non_imm.get(query_epi) {
+            Some(values) => values,
+            None => panic!("logKInv_entropy_AllOtherIEDB_non_imm Key '{}' not found", query_epi),
+        };
 
         // For the current query_epi: log_rho_dict[self_params][foreign_params] = rho_value
         let mut log_rho_dict: HashMap<String, HashMap<String, Option<f64>> > = HashMap::new();
@@ -677,6 +688,8 @@ pub fn compute_log_rho_multi_query_rs(
             all_keys_set.extend(logKInv_entropy_Ours_non_imm.keys());
             all_keys_set.extend(logKInv_entropy_Koncz_imm.keys());
             all_keys_set.extend(logKInv_entropy_Koncz_non_imm.keys());
+            all_keys_set.extend(logKInv_entropy_AllOtherIEDB_imm.keys());
+            all_keys_set.extend(logKInv_entropy_AllOtherIEDB_non_imm.keys());
 
             /*
             We need to iterate over all foreign keys in order to extract log_K_inv and entropy 
@@ -740,6 +753,29 @@ pub fn compute_log_rho_multi_query_rs(
                                 _ => continue, // Skip if self_value is None
                             };
                             iedb_non_imm_term += (log_K_inv_Koncz_non_imm - entropy_Koncz_non_imm).exp();
+                        }
+                    }
+
+                    if use_AllOtherIEDB_contribution {
+
+                        let target_epitopes_available = logKInv_entropy_AllOtherIEDB_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_AllOtherIEDB_imm.get(foreign_key);
+                            let (log_K_inv_AllOtherIEDB_imm, entropy_AllOtherIEDB_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if foreign_value is None or inner value is None
+                            };
+                            iedb_imm_term += (log_K_inv_AllOtherIEDB_imm - entropy_AllOtherIEDB_imm).exp();
+                        }
+
+                        let target_epitopes_available = logKInv_entropy_AllOtherIEDB_non_imm.keys().filter(|&key| key != "no_target").count() > 1;
+                        if target_epitopes_available {
+                            let foreign_value = logKInv_entropy_AllOtherIEDB_non_imm.get(foreign_key);
+                            let (log_K_inv_AllOtherIEDB_non_imm, entropy_AllOtherIEDB_non_imm) = match foreign_value {
+                                Some(Some((log_K_inv, entropy))) => (*log_K_inv, *entropy),
+                                _ => continue, // Skip if self_value is None
+                            };
+                            iedb_non_imm_term += (log_K_inv_AllOtherIEDB_non_imm - entropy_AllOtherIEDB_non_imm).exp();
                         }
                     }
 

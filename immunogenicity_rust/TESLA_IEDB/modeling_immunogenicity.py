@@ -56,7 +56,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-cTEC", action='store_true', default=False, help="whether to use cTEC gene expression")
     parser.add_argument("-cTEC_conc", action='store_true', default=False)
-    parser.add_argument("-save_pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs")
+    parser.add_argument("-save_pkl_dir", default="/Users/marcus/Work_Data/rust_outputs_local/immunogenicity_outputs_incl_all_other_IEDB")
     parser.add_argument("-distance_metric_type", default="all_tcr_all_combos_model")
 
     parser.add_argument("-data_matrix_dir", default="/Users/marcus/Work_Data/Conifold_editing/CFIT/cfit/data/matrices/")
@@ -69,6 +69,10 @@ if __name__ == "__main__":
     parser.add_argument("-immunogenic_Tesla_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_Tesla_peptides.fasta")
     parser.add_argument("-nonimmunogenic_Tesla_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_Tesla_peptides.fasta")
 
+    parser.add_argument("-immunogenic_AllOtherIEDB_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/immunogenic_all_iedb_tesla_from_Marta_overlaps_with_tesla_koncz_ours_removed.fasta")
+    parser.add_argument("-nonimmunogenic_AllOtherIEDB_fasta_path", default="/Users/marcus/Work_Data/Foreign_Epitopes/nonimmunogenic_all_iedb_tesla_from_Marta_overlaps_with_tesla_koncz_ours_removed.fasta")
+
+
     parser.add_argument("-csv_S_dir", default="/Users/marcus/Work_Data/Self_Epitopes")
     parser.add_argument("-csv_F_dir", default="/Users/marcus/Work_Data/Foreign_Epitopes")
 
@@ -79,8 +83,8 @@ if __name__ == "__main__":
 
     parser.add_argument("-allele", default='A0301')
 
-    parser.add_argument("-inclusive_start_ind", default="67")
-    parser.add_argument("-inclusive_end_ind", default="2000")
+    parser.add_argument("-inclusive_start_ind", default="0")
+    parser.add_argument("-inclusive_end_ind", default="2")
     args = parser.parse_args()
 
 
@@ -121,6 +125,9 @@ if __name__ == "__main__":
     immunogenic_Tesla_fasta_path = args.immunogenic_Tesla_fasta_path
     nonimmunogenic_Tesla_fasta_path = args.nonimmunogenic_Tesla_fasta_path
 
+    immunogenic_AllOtherIEDB_fasta_path = args.immunogenic_AllOtherIEDB_fasta_path
+    nonimmunogenic_AllOtherIEDB_fasta_path = args.nonimmunogenic_AllOtherIEDB_fasta_path
+
     start_time = time.time()
 
     with open(os.path.join(args.tesla_variables_dir, 'TESLA_variables_'+args.distance_metric_type+'.pkl'),'rb') as pyt:
@@ -155,6 +162,8 @@ if __name__ == "__main__":
     csv_ONImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Ours_nonImm/epitopes_Kd_values_"+hla+".csv")
     csv_TImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Tesla_Imm/epitopes_Kd_values_"+hla+".csv")
     csv_TNImm_kds_file = os.path.join(args.csv_F_dir, "Kds/Tesla_nonImm/epitopes_Kd_values_"+hla+".csv")
+    csv_AOImm_kds_file = os.path.join(args.csv_F_dir, "Kds/All_IEDB_from_Marta_Imm/epitopes_Kd_values_"+hla+".csv")
+    csv_AONImm_kds_file = os.path.join(args.csv_F_dir, "Kds/All_IEDB_from_Marta_nonImm/epitopes_Kd_values_"+hla+".csv")
 
     with open(os.path.join(args.load_target_hla_epi_dir,'target_hla_epi_dict.pkl'),'rb') as pot:
         target_hla_epi_dict = pickle.load(pot)
@@ -183,6 +192,8 @@ if __name__ == "__main__":
             csv_ONImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Ours_nonimm_distances.csv")
             csv_TImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Tesla_imm_distances.csv")
             csv_TNImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_Tesla_nonimm_distances.csv")
+            csv_AOImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_AllOtherIEDB_imm_distances.csv")
+            csv_AONImm_dists_file = os.path.join(args.csv_S_dir, "Distances/QUERYEPISTR_AllOtherIEDB_nonimm_distances.csv")
         else:
             csv_S_dists_file = ""
             csv_KImm_dists_file = ""
@@ -190,7 +201,9 @@ if __name__ == "__main__":
             csv_OImm_dists_file = ""
             csv_ONImm_dists_file = "" 
             csv_TImm_dists_file = ""
-            csv_TNImm_dists_file = ""         
+            csv_TNImm_dists_file = ""  
+            csv_AOImm_dists_file = ""
+            csv_AONImm_dists_file = ""
 
 
         
@@ -387,12 +400,52 @@ if __name__ == "__main__":
         )
         print("[python] Tesla_non_imm runtime: ",runtime)
 
+#####
+        if allele in target_hla_epi_dict['all_other_iedb_imm']:
+            target_epitopes_at_allele = target_hla_epi_dict['all_other_iedb_imm'][allele]
+        else:
+            target_epitopes_at_allele = []
+        logKInv_entropy_AllOtherIEDB_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+            query_epi_list, 
+            [(csv_AOImm_dists_file,load_precomputed_distances,immunogenic_AllOtherIEDB_fasta_path)], csv_AOImm_kds_file,
+            distance_metric, 
+            data_matrix_dir, 
+            max_target_num,
+            gamma_d_nonself_values,
+            gamma_logkd_nonself_values,
+            d_ub_foreign, d_lb_foreign,
+            compute_logKinv_and_entropy,
+            compute_logCh,
+            target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
+        )
+        print("[python] AllOtherIEDB_imm runtime: ",runtime)
 
+        if allele in target_hla_epi_dict['all_other_iedb_nonimm']:
+            target_epitopes_at_allele = target_hla_epi_dict['all_other_iedb_nonimm'][allele]
+        else:
+            target_epitopes_at_allele = []
+        logKInv_entropy_AllOtherIEDB_non_imm_epi_dict, _, _, runtime = immunogenicity_rust.compute_log_non_rho_terms_multi_query_single_hla_py(
+            query_epi_list, 
+            [(csv_AONImm_dists_file,load_precomputed_distances,nonimmunogenic_AllOtherIEDB_fasta_path)], csv_AONImm_kds_file,
+            distance_metric, 
+            data_matrix_dir, 
+            max_target_num,
+            gamma_d_nonself_values,
+            gamma_logkd_nonself_values,
+            d_ub_foreign, d_lb_foreign,
+            compute_logKinv_and_entropy,
+            compute_logCh,
+            target_epitopes_at_allele,
+            calc_second_hm_without_dist_restriction,
+        )
+        print("[python] Tesla_non_imm runtime: ",runtime)
         ##  ---------------------------------------------
         ##  --------------  COMPUTE rho  ----------------
         use_Ours_contribution = True 
         use_Koncz_contribution = True
-        use_Tesla_contribution = True 
+        use_Tesla_contribution = True
+        use_AllOtherIEDB_contribution = True
 
         log_rho_dict, runtime = immunogenicity_rust.compute_log_rho_multi_query_py(
             logKInv_entropy_self_for_rho_dict, 
@@ -405,6 +458,9 @@ if __name__ == "__main__":
             logKInv_entropy_Tesla_imm_epi_dict,
             logKInv_entropy_Tesla_non_imm_epi_dict, 
             use_Tesla_contribution,
+            logKInv_entropy_AllOtherIEDB_imm_epi_dict,
+            logKInv_entropy_AllOtherIEDB_non_imm_epi_dict, 
+            use_AllOtherIEDB_contribution,
         )
         print("[python] log_rho_dict runtime: ",runtime)
         print("Now saving to .pkl ...")
@@ -417,6 +473,7 @@ if __name__ == "__main__":
                    logKInv_entropy_Koncz_imm_epi_dict, logKInv_entropy_Koncz_non_imm_epi_dict, 
                    logKInv_entropy_Ours_imm_epi_dict, logKInv_entropy_Ours_non_imm_epi_dict,
                    logKInv_entropy_Tesla_imm_epi_dict, logKInv_entropy_Tesla_non_imm_epi_dict,
+                   logKInv_entropy_AllOtherIEDB_imm_epi_dict, logKInv_entropy_AllOtherIEDB_non_imm_epi_dict,
                    log_rho_dict,
                    original_query_epitope, allele]
         

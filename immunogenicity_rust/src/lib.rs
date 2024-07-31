@@ -197,7 +197,10 @@ pub fn compute_log_rho_multi_query_py(
     use_Koncz_contribution: bool,
     logKInv_entropy_Tesla_imm_epi_dict: &PyDict,
     logKInv_entropy_Tesla_non_imm_epi_dict: &PyDict,
-    use_Tesla_contribution: bool) -> PyResult<(HashMap<String, HashMap<String, HashMap<String, Option<f64>>>>, u64)> {
+    use_Tesla_contribution: bool,
+    logKInv_entropy_AllOtherIEDB_imm_epi_dict: &PyDict,
+    logKInv_entropy_AllOtherIEDB_non_imm_epi_dict: &PyDict,
+    use_AllOtherIEDB_contribution: bool) -> PyResult<(HashMap<String, HashMap<String, HashMap<String, Option<f64>>>>, u64)> {
     
     // Convert PyDict inputs to HashMaps
     let query_dict_logKInv_entropy_self = convert_nested_PyDict_to_HashMap(logKInv_entropy_self_dict)?;
@@ -207,6 +210,8 @@ pub fn compute_log_rho_multi_query_py(
     let query_dict_logKInv_entropy_Koncz_non_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Koncz_non_imm_epi_dict)?;
     let query_dict_logKInv_entropy_Tesla_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Tesla_imm_epi_dict)?;
     let query_dict_logKInv_entropy_Tesla_non_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_Tesla_non_imm_epi_dict)?;
+    let query_dict_logKInv_entropy_AllOtherIEDB_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_AllOtherIEDB_imm_epi_dict)?;
+    let query_dict_logKInv_entropy_AllOtherIEDB_non_imm = convert_nested_PyDict_to_HashMap(logKInv_entropy_AllOtherIEDB_non_imm_epi_dict)?;
 
     // Call the pure Rust function and handle its Result
     let (result, elapsed_time) = match compute_log_rho_multi_query_rs(
@@ -220,6 +225,9 @@ pub fn compute_log_rho_multi_query_py(
         &query_dict_logKInv_entropy_Tesla_imm,
         &query_dict_logKInv_entropy_Tesla_non_imm,
         use_Tesla_contribution,
+        &query_dict_logKInv_entropy_AllOtherIEDB_imm,
+        &query_dict_logKInv_entropy_AllOtherIEDB_non_imm,
+        use_AllOtherIEDB_contribution,
     ) {
         Ok(result) => result,
         Err(err) => return Err(pyo3::exceptions::PyException::new_err(format!("Rust function error: {}", err))),

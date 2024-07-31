@@ -142,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument("-load_target_hla_epi_dir", default="/sc/arion/projects/FLAI/marcus/Foreign_Epitopes")
 
     parser.add_argument('-d_ub', type=int, default=100, help='(inclusive bound) distances at or below this threshold contirbute to Kinv_self (models positive selection)')
-    parser.add_argument('-d_lb', type=int, default=0, help='(exclusive bound) distances above this cutoff contribute to Kinv_self (partially models negative selection)')
+    parser.add_argument('-d_lb', type=int, default=-1, help='(exclusive bound) distances above this cutoff contribute to Kinv_self (partially models negative selection)')
 
     parser.add_argument("-inclusive_start_ind", default="0")
     parser.add_argument("-inclusive_end_ind", default="10")
