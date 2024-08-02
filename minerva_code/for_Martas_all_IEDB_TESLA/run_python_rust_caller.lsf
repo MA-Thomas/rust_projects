@@ -19,16 +19,10 @@ echo "In run_compute_immunogenicity_factors.lsf"
 
 
 # Define the total number of indices and the step (Marta all IEDB_TESLA immunogenic)
-n_stop_exclusive=21365  # total number of indices (number of assay epitopes)
+n_stop_exclusive=7243 #unique tuples, not 21365 total tuples  # total number of indices (number of assay epitopes)
 step=10  # fixed number of indices between start and stop (number of assay epitopes handled sequentially per job)
 n_restart=0  # variable to hold the restart index if many tuples have been computed and I don't want to repeat them
 itype="immunogenic"
-
-# # Define the total number of indices and the step (Marta all IEDB_TESLA nonimmunogenic)
-# n_stop_exclusive=21073  # total number of indices (number of assay epitopes)
-# step=10  # fixed number of indices between start and stop (number of assay epitopes handled sequentially per job)
-# n_restart=0  # variable to hold the restart index if many tuples have been computed and I don't want to repeat them
-# itype="nonimmunogenic"
 
 # Create the list of start/stop tuples
 declare -a tuple_list=()
@@ -57,8 +51,52 @@ for tuple in "${tuple_list[@]}"; do
     start=$(echo $tuple | cut -d',' -f1 | tr -d '()')
     stop=$(echo $tuple | cut -d',' -f2 | tr -d '()')
 
-    job1Name=peptides_${start}_to_${stop}_compute_immunogenicities_rust
-    job1OutErr=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/OUT_ERR_files/peptides_${start}_to_${stop}
+    job1Name=peptides_${start}_to_${stop}_compute_imm_rust
+    job1OutErr=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/OUT_ERR_files/peptides_${start}_to_${stop}_imm
+
+    # # total allocated memory is -n argument * -R argument
+    bsub -J $job1Name -oo ${job1OutErr}.outf -eo ${job1OutErr}.errf -q premium -P acc_lukszaLab -R rusage[mem=500] -R span[hosts=1] -n 20 -W 10:00 ./python_rust_caller.lsf "$start" "$stop" "$itype"
+done
+
+
+###################
+
+
+# Define the total number of indices and the step (Marta all IEDB_TESLA nonimmunogenic)
+n_stop_exclusive=17938  #unique tuples, not 21073 total tuples # total number of indices (number of assay epitopes)
+step=10  # fixed number of indices between start and stop (number of assay epitopes handled sequentially per job)
+n_restart=0  # variable to hold the restart index if many tuples have been computed and I don't want to repeat them
+itype="nonimmunogenic"
+
+# Create the list of start/stop tuples
+declare -a tuple_list=()
+for ((i=n_restart; i<n_stop_exclusive; i+=step)); do
+    start=$i
+    stop=$((i+step-1))
+    if (( stop >= n_stop_exclusive )); then
+        stop=$((n_stop_exclusive-1))
+    fi
+
+    tuple_list+=("($start,$stop)")
+done
+
+
+# Ensure that tuple_list is not empty
+if [ ${#tuple_list[@]} -eq 0 ]; then
+    echo "No valid tuples found starting from index $n_restart. Exiting."
+    exit 1
+fi
+
+# Loop over the list of tuples
+for tuple in "${tuple_list[@]}"; do
+    echo submitting start and stop tuples: $tuple
+
+    # Extract start and stop indices from the tuple
+    start=$(echo $tuple | cut -d',' -f1 | tr -d '()')
+    stop=$(echo $tuple | cut -d',' -f2 | tr -d '()')
+
+    job1Name=peptides_${start}_to_${stop}_compute_non_imm_rust
+    job1OutErr=/sc/arion/work/thomam32/WorkingDir/rust_projects_on_Minerva/OUT_ERR_files/peptides_${start}_to_${stop}_non_imm
 
     # # total allocated memory is -n argument * -R argument
     bsub -J $job1Name -oo ${job1OutErr}.outf -eo ${job1OutErr}.errf -q premium -P acc_lukszaLab -R rusage[mem=500] -R span[hosts=1] -n 20 -W 10:00 ./python_rust_caller.lsf "$start" "$stop" "$itype"

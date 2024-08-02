@@ -142,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument("-load_target_hla_epi_dir", default="/sc/arion/projects/FLAI/marcus/Foreign_Epitopes")
 
     parser.add_argument('-d_ub', type=int, default=100, help='(inclusive bound) distances at or below this threshold contirbute to Kinv_self (models positive selection)')
-    parser.add_argument('-d_lb', type=int, default=-1, help='(exclusive bound) distances above this cutoff contribute to Kinv_self (partially models negative selection)')
+    parser.add_argument('-d_lb', type=int, default=0, help='(exclusive bound) distances above this cutoff contribute to Kinv_self (partially models negative selection)')
 
     parser.add_argument("-inclusive_start_ind", default="0")
     parser.add_argument("-inclusive_end_ind", default="10")
@@ -188,6 +188,7 @@ if __name__ == "__main__":
     #     target_hla_epi_dict = pickle.load(pot)
 
     sorted_query_neoantigen_hla_tuples = load_neo_hla_tuples_from_csv(args.neo_hla_tuples_csv)
+    sorted_query_neoantigen_hla_tuples = sorted(list(set(sorted_query_neoantigen_hla_tuples)))
 
     for idx, (query_epitope,allele,Kd) in enumerate(sorted_query_neoantigen_hla_tuples):
 
@@ -255,11 +256,19 @@ if __name__ == "__main__":
         compute_logKinv_and_entropy = True
 
         # # PARAMETER SETS FOR ZACH'S METRIC
-        gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(2e-4, 1, 7),4)) )))
-        gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 12),4))  )))
+        # gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(2e-4, 1, 7),4)) )))
+        # gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 12),4))  )))
+        #
+        # gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(1e-1, 5, 6),4)) + [1e-8, 1e-100])))
+        # gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 10),4))  +[1e-8, 1e-100])))
+
+        # # Extended paramsets (just for KInv_self evaluated on Marta's full IEDB data)
+        gamma_d_self_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 10),10)) + list(np.round(create_log_spaced_list(1e-4, 1, 30),4)) + list(np.round(create_log_spaced_list(1, 10, 10),4)) + [1e-8, 1e-100] )))
+        gamma_logkd_self_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 10),4)) + list(np.round(create_log_spaced_list(1e-3, 1, 30),4)) + list(np.round(create_log_spaced_list(0.5, 10, 10),4)) + [1e-8, 1e-100] )))
 
         gamma_d_nonself_values = sorted(list(set( list(np.round(create_evenly_spaced_list(1e-6, 1e-4, 8),10)) + list(np.round(create_log_spaced_list(1e-1, 5, 6),4)) + [1e-8, 1e-100])))
         gamma_logkd_nonself_values = sorted(list(set( list(np.round(create_log_spaced_list(1e-2, 1.0, 5),4)) + list(np.round(create_log_spaced_list(5e-3, 0.6, 10),4))  +[1e-8, 1e-100])))
+
 
         #################################################################################################
         #################################################################################################
